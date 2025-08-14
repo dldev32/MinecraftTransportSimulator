@@ -604,9 +604,21 @@ public class EntityParticle extends AEntityC_Renderable {
                 orientation.setToVector(helperPoint, true);
                 break;
             }
+            case XAXIS: {
+                helperPoint.set(InterfaceManager.clientInterface.getCameraPosition()).subtract(position);
+                helperPoint.x = 0;
+                orientation.setToVector(helperPoint, true);
+                break;
+            }
             case YAXIS: {
                 helperPoint.set(InterfaceManager.clientInterface.getCameraPosition()).subtract(position);
                 helperPoint.y = 0;
+                orientation.setToVector(helperPoint, true);
+                break;
+            }
+            case ZAXIS: {
+                helperPoint.set(InterfaceManager.clientInterface.getCameraPosition()).subtract(position);
+                helperPoint.z = 0;
                 orientation.setToVector(helperPoint, true);
                 break;
             }

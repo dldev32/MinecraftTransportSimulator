@@ -188,8 +188,12 @@ public class JSONParticle {
         FIXED,
         @JSONDescription("Particle rotates to always face the player.")
         PLAYER,
+        @JSONDescription("Particle rotates to face the player, but only about the X-axis.")
+        XAXIS,
         @JSONDescription("Particle rotates to face the player, but only about the Y-axis.")
         YAXIS,
+        @JSONDescription("Particle rotates to face the player, but only about the Z-axis.")
+        ZAXIS,
         @JSONDescription("Particle rotates to face its motion.  Think bullets.")
         MOTION;
     }
