@@ -9,52 +9,75 @@ import minecrafttransportsimulator.entities.instances.EntityVehicleF_Physics;
 import minecrafttransportsimulator.entities.instances.PartEngine;
 import minecrafttransportsimulator.entities.instances.PartGroundDevice;
 import minecrafttransportsimulator.entities.instances.PartGun;
+import minecrafttransportsimulator.entities.instances.PartInteractable;
 import minecrafttransportsimulator.entities.instances.PartPropeller;
 import minecrafttransportsimulator.entities.instances.PartSeat;
 import minecrafttransportsimulator.guis.components.AGUIBase;
-import minecrafttransportsimulator.guis.components.GUIComponent3DModel;
-import minecrafttransportsimulator.guis.components.GUIComponentDamageBar;
-import minecrafttransportsimulator.guis.components.GUIComponentLabel;
-import minecrafttransportsimulator.guis.components.GUIComponentDamageRect;
+import minecrafttransportsimulator.guis.components.GUIComponentCutout;
+import minecrafttransportsimulator.guis.components.GUIComponentIconCutout;
+import minecrafttransportsimulator.guis.components.GUIComponentVehicleDamageModel;
 import minecrafttransportsimulator.mcinterface.InterfaceManager;
-import minecrafttransportsimulator.rendering.RenderText.TextAlignment;
 import minecrafttransportsimulator.systems.CameraSystem;
 import minecrafttransportsimulator.systems.CameraSystem.CameraMode;
 import minecrafttransportsimulator.systems.ConfigSystem;
 
 /**
- * War Thunder-style equipment damage panel that displays vehicle and part health
- * as a visual diagram. Shows a 3D model of the vehicle with color-coded part
- * indicators based on their damage state. Positioned in the bottom-left corner
- * of the screen as a translucent overlay.
+ * War Thunder-style equipment damage panel that displays vehicle and part health.
+ * Shows a top-down 3D model of the vehicle with all attached parts, surrounded by
+ * a white 2px outline that fills with semi-transparent color based on damage state.
+ * Part type icons from the panel texture are displayed at the top, changing from
+ * white to red when the corresponding part is destroyed (0 HP).
  *
  * @author don_bruce
  */
 public class GUIEquipmentDamagePanel extends AGUIBase {
-    private static final int PANEL_WIDTH = 120;
+    private static final String PANEL_TEXTURE = "mts:textures/guis/damage_panel.png";
+
+    //Panel layout constants matching the texture.
+    private static final int PANEL_WIDTH = 140;
     private static final int PANEL_HEIGHT = 160;
-    private static final int BAR_WIDTH = 50;
-    private static final int BAR_HEIGHT = 5;
-    private static final int ENTRY_HEIGHT = 10;
-    private static final int MODEL_SIZE = 48;
+    private static final int ICON_CELL_W = 20;
+    private static final int ICON_CELL_H = 16;
+    private static final int ICON_CELL_Y = 2;
+    private static final int ICON_CELL_GAP = 2;
+    private static final int ICON_CELL_START_X = 4;
+    private static final int MODEL_AREA_Y = 21;
+    private static final int MODEL_AREA_H = 110;
     private static final int PADDING = 4;
+
+    //Texture UV for icon cells (each 20x16 in the 256x256 texture).
+    //Icons at top row: engine(0), tracks(1), turret(2), gun(3), fuel(4), propeller(5)
+    private static final int ICON_COUNT = 6;
+    private static final int ICON_ENGINE = 0;
+    private static final int ICON_TRACKS = 1;
+    private static final int ICON_TURRET = 2;
+    private static final int ICON_GUN = 3;
+    private static final int ICON_FUEL = 4;
+    private static final int ICON_PROPELLER = 5;
 
     private static final ColorRGB COLOR_HEALTHY = new ColorRGB(0, 200, 0);
     private static final ColorRGB COLOR_DAMAGED = new ColorRGB(255, 200, 0);
     private static final ColorRGB COLOR_CRITICAL = new ColorRGB(255, 100, 0);
     private static final ColorRGB COLOR_DESTROYED = new ColorRGB(200, 0, 0);
-    private static final ColorRGB PANEL_BG_COLOR = new ColorRGB(20, 25, 30);
 
     private final EntityVehicleF_Physics vehicle;
     private final PartSeat seat;
 
-    private GUIComponentDamageRect panelBackground;
-    private GUIComponentLabel titleLabel;
-    private GUIComponentLabel hullHealthLabel;
-    private GUIComponentDamageBar hullHealthBar;
-    private GUIComponent3DModel vehicleModel;
+    //Background panel cutout from texture.
+    private GUIComponentCutout panelBackground;
 
-    private final List<PartDamageEntry> partEntries = new ArrayList<>();
+    //Icon cutouts from texture (one per icon type, with color tinting support).
+    private final GUIComponentIconCutout[] iconCutouts = new GUIComponentIconCutout[ICON_COUNT];
+    //Track which icons are active (have at least one part of that type).
+    private final boolean[] iconActive = new boolean[ICON_COUNT];
+    //Track if any part of that type is destroyed.
+    private final boolean[] iconDestroyed = new boolean[ICON_COUNT];
+
+    //Vehicle damage model component.
+    private GUIComponentVehicleDamageModel vehicleDamageModel;
+
+    //Part tracking for damage state.
+    private final List<PartDamageInfo> trackedParts = new ArrayList<>();
 
     public GUIEquipmentDamagePanel(EntityVehicleF_Physics vehicle, PartSeat seat) {
         super();
@@ -69,40 +92,44 @@ public class GUIEquipmentDamagePanel extends AGUIBase {
         int panelLeft = PADDING;
         int panelTop = screenHeight - PANEL_HEIGHT - PADDING;
 
-        //Semi-transparent dark background panel.
-        addComponent(panelBackground = new GUIComponentDamageRect(panelLeft, panelTop, PANEL_WIDTH, PANEL_HEIGHT, PANEL_BG_COLOR, 0.65F));
+        //Background panel cutout (the entire 140x160 dark area from the texture).
+        addComponent(panelBackground = new GUIComponentCutout(this, panelLeft, panelTop, PANEL_WIDTH, PANEL_HEIGHT, 0, 0, PANEL_WIDTH, PANEL_HEIGHT));
         panelBackground.ignoreGUILightingState = true;
 
-        //Title label: vehicle name.
-        addComponent(titleLabel = new GUIComponentLabel(panelLeft + PANEL_WIDTH / 2, panelTop + 3, ColorRGB.WHITE, "", TextAlignment.CENTERED, 0.75F));
-        titleLabel.ignoreGUILightingState = true;
+        //Create icon cutouts from the texture (tintable for damage state).
+        for (int i = 0; i < ICON_COUNT; i++) {
+            int texX = ICON_CELL_START_X + i * (ICON_CELL_W + ICON_CELL_GAP);
+            int texY = ICON_CELL_Y;
+            int screenX = panelLeft + ICON_CELL_START_X + i * (ICON_CELL_W + ICON_CELL_GAP);
+            int screenY = panelTop + ICON_CELL_Y;
+            iconCutouts[i] = new GUIComponentIconCutout(this, screenX, screenY, ICON_CELL_W, ICON_CELL_H, texX, texY, ICON_CELL_W, ICON_CELL_H);
+            iconCutouts[i].ignoreGUILightingState = true;
+            addComponent(iconCutouts[i]);
+        }
 
-        //3D model of the vehicle (isometric top-down view).
-        addComponent(vehicleModel = new GUIComponent3DModel(panelLeft + PANEL_WIDTH / 2, panelTop + 8 + MODEL_SIZE / 2, MODEL_SIZE, true, false, false));
+        //Vehicle damage model (top-down view, centered in the model area).
+        int modelCenterX = panelLeft + PANEL_WIDTH / 2;
+        int modelCenterY = panelTop + MODEL_AREA_Y + MODEL_AREA_H / 2;
+        addComponent(vehicleDamageModel = new GUIComponentVehicleDamageModel(modelCenterX, modelCenterY, MODEL_AREA_H * 0.8F, vehicle));
 
-        //Hull health label and bar below the model.
-        int healthY = panelTop + 12 + MODEL_SIZE;
-        addComponent(hullHealthLabel = new GUIComponentLabel(panelLeft + PADDING, healthY, ColorRGB.WHITE, "", TextAlignment.LEFT_ALIGNED, 0.6F));
-        hullHealthLabel.ignoreGUILightingState = true;
-        addComponent(hullHealthBar = new GUIComponentDamageBar(panelLeft + PANEL_WIDTH - BAR_WIDTH - PADDING, healthY, BAR_WIDTH, BAR_HEIGHT));
-
-        //Part damage entries below the hull health.
-        partEntries.clear();
-        int currentY = healthY + ENTRY_HEIGHT;
+        //Scan parts and determine which icon types are active.
+        trackedParts.clear();
+        for (int i = 0; i < ICON_COUNT; i++) {
+            iconActive[i] = false;
+            iconDestroyed[i] = false;
+        }
 
         for (APart part : vehicle.allParts) {
-            String partName = getPartDisplayName(part);
-            if (partName != null && part.definition.general.health > 0) {
-                GUIComponentLabel nameLabel = new GUIComponentLabel(panelLeft + PADDING, currentY, ColorRGB.WHITE, "", TextAlignment.LEFT_ALIGNED, 0.5F);
-                nameLabel.ignoreGUILightingState = true;
-                addComponent(nameLabel);
-
-                GUIComponentDamageBar bar = new GUIComponentDamageBar(panelLeft + PANEL_WIDTH - BAR_WIDTH - PADDING, currentY, BAR_WIDTH, BAR_HEIGHT);
-                addComponent(bar);
-
-                partEntries.add(new PartDamageEntry(part, nameLabel, bar, partName));
-                currentY += ENTRY_HEIGHT;
+            int iconIndex = getIconIndexForPart(part);
+            if (iconIndex >= 0) {
+                iconActive[iconIndex] = true;
+                trackedParts.add(new PartDamageInfo(part, iconIndex));
             }
+        }
+
+        //Also consider the hull itself as "turret" icon.
+        if (vehicle.definition.general.health > 0) {
+            iconActive[ICON_TURRET] = true;
         }
     }
 
@@ -110,7 +137,6 @@ public class GUIEquipmentDamagePanel extends AGUIBase {
     public void setStates() {
         super.setStates();
 
-        //Only show when riding in a vehicle and HUD is visible.
         boolean shouldShow = CameraSystem.customCameraOverlay == null
                 && (seat.placementDefinition.isController || seat.canControlGuns)
                 && (InterfaceManager.clientInterface.getCameraMode() == CameraMode.FIRST_PERSON
@@ -118,52 +144,45 @@ public class GUIEquipmentDamagePanel extends AGUIBase {
                     : ConfigSystem.client.renderingSettings.renderHUD_3P.value);
 
         panelBackground.visible = shouldShow;
-        titleLabel.visible = shouldShow;
-        vehicleModel.visible = shouldShow;
-        hullHealthLabel.visible = shouldShow;
-        hullHealthBar.visible = shouldShow;
+        vehicleDamageModel.visible = shouldShow;
+        for (int i = 0; i < ICON_COUNT; i++) {
+            iconCutouts[i].visible = shouldShow && iconActive[i];
+        }
 
-        if (shouldShow) {
-            //Update title.
-            titleLabel.text = vehicle.definition.general.name != null ? vehicle.definition.general.name : "Vehicle";
+        if (!shouldShow) {
+            return;
+        }
 
-            //Update 3D model.
-            vehicleModel.modelLocation = vehicle.definition.getModelLocation(vehicle.subDefinition);
-            vehicleModel.textureLocation = vehicle.getTexture();
+        //Calculate overall vehicle damage for the model fill.
+        int maxHealth = vehicle.definition.general.health;
+        float overallDamagePercent = 0;
+        if (maxHealth > 0) {
+            overallDamagePercent = (float) (vehicle.damageVar.currentValue / maxHealth);
+        }
+        vehicleDamageModel.setDamagePercent(overallDamagePercent);
+        vehicleDamageModel.setDamageColor(getDamageColor(1.0F - overallDamagePercent));
 
-            //Update hull health.
-            int maxHealth = vehicle.definition.general.health;
-            int currentHealth = maxHealth > 0 ? (int) Math.ceil(maxHealth - vehicle.damageVar.currentValue) : maxHealth;
-            if (currentHealth < 0) currentHealth = 0;
-            float healthPercent = maxHealth > 0 ? (float) currentHealth / maxHealth : 1.0F;
-            hullHealthLabel.text = "Hull";
-            hullHealthLabel.color = getDamageColor(healthPercent);
-            hullHealthBar.setHealthPercent(healthPercent);
+        //Reset icon destroyed state.
+        for (int i = 0; i < ICON_COUNT; i++) {
+            iconDestroyed[i] = false;
+        }
 
-            //Update part entries.
-            for (PartDamageEntry entry : partEntries) {
-                entry.label.visible = shouldShow;
-                entry.bar.visible = shouldShow;
-
-                if (entry.part.isValid) {
-                    int partMaxHealth = entry.part.definition.general.health;
-                    int partCurrentHealth = partMaxHealth > 0 ? (int) Math.ceil(partMaxHealth - entry.part.damageVar.currentValue) : partMaxHealth;
-                    if (partCurrentHealth < 0) partCurrentHealth = 0;
-                    float partHealthPercent = partMaxHealth > 0 ? (float) partCurrentHealth / partMaxHealth : 1.0F;
-
-                    entry.label.text = entry.displayName;
-                    entry.label.color = getDamageColor(partHealthPercent);
-                    entry.bar.setHealthPercent(partHealthPercent);
-                } else {
-                    entry.label.text = entry.displayName;
-                    entry.label.color = COLOR_DESTROYED;
-                    entry.bar.setHealthPercent(0);
-                }
+        //Check each tracked part for destruction.
+        for (PartDamageInfo info : trackedParts) {
+            if (!info.part.isValid || info.part.outOfHealth) {
+                iconDestroyed[info.iconIndex] = true;
             }
-        } else {
-            for (PartDamageEntry entry : partEntries) {
-                entry.label.visible = false;
-                entry.bar.visible = false;
+        }
+
+        //Check hull destruction for turret icon.
+        if (vehicle.outOfHealth) {
+            iconDestroyed[ICON_TURRET] = true;
+        }
+
+        //Update icon colors: white by default, red when destroyed.
+        for (int i = 0; i < ICON_COUNT; i++) {
+            if (iconActive[i]) {
+                iconCutouts[i].tintColor = iconDestroyed[i] ? ColorRGB.RED : ColorRGB.WHITE;
             }
         }
     }
@@ -185,12 +204,12 @@ public class GUIEquipmentDamagePanel extends AGUIBase {
 
     @Override
     public int getWidth() {
-        return screenWidth;
+        return PANEL_WIDTH;
     }
 
     @Override
     public int getHeight() {
-        return screenHeight;
+        return PANEL_HEIGHT;
     }
 
     @Override
@@ -205,32 +224,38 @@ public class GUIEquipmentDamagePanel extends AGUIBase {
 
     @Override
     protected String getTexture() {
-        return GUIComponentDamageBar.DAMAGE_PANEL_TEXTURE;
+        return PANEL_TEXTURE;
+    }
+
+    @Override
+    public void close() {
+        super.close();
+        GUIComponentVehicleDamageModel.clearDamageModelCaches();
     }
 
     /**
-     * Returns the display name for a part, or null if the part should not be shown.
+     * Returns the icon index for a given part type, or -1 if not shown.
      */
-    private static String getPartDisplayName(APart part) {
+    private static int getIconIndexForPart(APart part) {
         if (part instanceof PartEngine) {
-            return "Engine";
+            return ICON_ENGINE;
         } else if (part instanceof PartGroundDevice) {
-            PartGroundDevice ground = (PartGroundDevice) part;
-            if (ground.definition.ground.isTread) {
-                return part.localOffset.x > 0 ? "R.Track" : "L.Track";
-            } else {
-                return part.localOffset.x > 0 ? "R.Wheel" : "L.Wheel";
-            }
+            return ICON_TRACKS;
         } else if (part instanceof PartGun) {
-            return "Gun";
+            return ICON_GUN;
         } else if (part instanceof PartPropeller) {
-            return "Propeller";
+            return ICON_PROPELLER;
+        } else if (part instanceof PartInteractable) {
+            PartInteractable interactable = (PartInteractable) part;
+            if (interactable.tank != null) {
+                return ICON_FUEL;
+            }
         }
-        return null;
+        return -1;
     }
 
     /**
-     * Returns the appropriate color for a given health percentage.
+     * Returns the color for a given health percentage (1.0 = full, 0.0 = dead).
      */
     static ColorRGB getDamageColor(float healthPercent) {
         if (healthPercent > 0.75F) {
@@ -245,19 +270,15 @@ public class GUIEquipmentDamagePanel extends AGUIBase {
     }
 
     /**
-     * Helper class for tracking part damage entries in the panel.
+     * Tracks a part and its associated icon index.
      */
-    private static class PartDamageEntry {
+    private static class PartDamageInfo {
         final APart part;
-        final GUIComponentLabel label;
-        final GUIComponentDamageBar bar;
-        final String displayName;
+        final int iconIndex;
 
-        PartDamageEntry(APart part, GUIComponentLabel label, GUIComponentDamageBar bar, String displayName) {
+        PartDamageInfo(APart part, int iconIndex) {
             this.part = part;
-            this.label = label;
-            this.bar = bar;
-            this.displayName = displayName;
+            this.iconIndex = iconIndex;
         }
     }
 }
