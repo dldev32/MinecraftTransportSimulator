@@ -11,6 +11,7 @@ import minecrafttransportsimulator.baseclasses.RotationMatrix;
 import minecrafttransportsimulator.entities.components.AEntityB_Existing;
 import minecrafttransportsimulator.entities.components.AEntityF_Multipart;
 import minecrafttransportsimulator.guis.components.AGUIBase;
+import minecrafttransportsimulator.guis.instances.GUIEquipmentDamagePanel;
 import minecrafttransportsimulator.guis.instances.GUIHUD;
 import minecrafttransportsimulator.guis.instances.GUIPanel;
 import minecrafttransportsimulator.guis.instances.GUIRadio;
@@ -185,6 +186,9 @@ public final class PartSeat extends APart {
                 //Open the HUD.  This will have been closed in the remove call.
                 new GUIHUD(vehicleOn, this);
 
+                //Open the equipment damage panel overlay.
+                new GUIEquipmentDamagePanel(vehicleOn, this);
+
                 //Auto-start the engines, if we have that config enabled and we can start them.
                 if (placementDefinition.isController && ConfigSystem.client.controlSettings.autostartEng.value && vehicleOn.canPlayerStartEngines((IWrapperPlayer) rider) && !vehicleOn.definition.motorized.overrideAutoStart) {
                     vehicleOn.engines.forEach(engine -> {
@@ -245,6 +249,7 @@ public final class PartSeat extends APart {
                 //Client player is the one that left the vehicle.  Make sure they don't have their mouse locked or a GUI open.
                 AGUIBase.closeIfOpen(GUIPanel.class);
                 AGUIBase.closeIfOpen(GUIHUD.class);
+                AGUIBase.closeIfOpen(GUIEquipmentDamagePanel.class);
                 AGUIBase.closeIfOpen(GUIRadio.class);
                 if (!riderChangingSeats) {
                     ControlSystem.resetMouseYoke();
