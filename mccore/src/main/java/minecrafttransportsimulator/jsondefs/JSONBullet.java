@@ -29,8 +29,17 @@ public class JSONBullet extends AJSONMultiModelProvider {
         @JSONDescription("Set this to true to make this bullet not spawn, but consume ammo.")
         public boolean isBlank;
 
-        @JSONDescription("If true, then this bullet will be considered a HEAT bullet and will use the HEAT armor value on any collision boxes it finds.  If that value isn't defined, it will just use the normal armor value.")
+        @Deprecated
         public boolean isHeat;
+
+        @JSONDescription("The cone angle, in degrees, for fragmentation spread when a FRAG-type bullet penetrates armor.  Fragments are scattered within this cone behind the point of penetration.")
+        public float fragConeAngle;
+
+        @JSONDescription("The probability (0.0 to 1.0) that a fragment will hit an internal component or crew member within the fragmentation cone.")
+        public float fragHitProbability;
+
+        @JSONDescription("The damage each fragment deals when it hits an internal component or crew member.")
+        public float fragDamage;
 
         @JSONDescription("Normally, bullet checks are handled only on the client that spawned them.  This client then sends the info to the server when it sees a hit.  This works best for most bullets, since it prevents the firing player from 'missing' something they hit due to lag.  However, this prevents bullets from hitting things that aren't loaded.  Setting this to true will make the bullet do checks on the server, which will let them hit anything loaded on the server, but will result in de-syncs between hit position seen and actual hit position if the gun is moving at any significant speed when fired.")
         public boolean isLongRange;
@@ -120,6 +129,12 @@ public class JSONBullet extends AJSONMultiModelProvider {
         WATER,
         @JSONDescription("A bullet that pierces player armor.  Useful for pesky super-suits.")
         ARMOR_PIERCING,
+        @JSONDescription("A HEAT (High-Explosive Anti-Tank) bullet.  Uses the HEAT armor value on collision boxes if defined, otherwise uses normal armor.  Penetration is not affected by velocity loss.")
+        HEAT,
+        @JSONDescription("A subcaliber (sabot) round.  Uses the same penetration mechanics as armor-piercing rounds, but is a distinct type for categorization purposes.")
+        SUBCALIBER,
+        @JSONDescription("A bullet that produces fragmentation upon penetrating armor.  Fragments deal damage to internal components and crew based on the bullet's fragConeAngle, fragHitProbability, and fragDamage parameters.")
+        FRAG,
         @JSONDescription("A bullet that has a custom function defined in code. Useful for integration with a variety of mods, regardless of version.")
         CUSTOM
     }

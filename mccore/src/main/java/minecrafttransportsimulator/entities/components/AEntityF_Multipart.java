@@ -24,6 +24,7 @@ import minecrafttransportsimulator.baseclasses.TransformationMatrix;
 import minecrafttransportsimulator.entities.instances.APart;
 import minecrafttransportsimulator.entities.instances.EntityBullet;
 import minecrafttransportsimulator.entities.instances.EntityBullet.HitType;
+import minecrafttransportsimulator.jsondefs.JSONBullet.BulletType;
 import minecrafttransportsimulator.entities.instances.EntityPlacedPart;
 import minecrafttransportsimulator.items.components.AItemBase;
 import minecrafttransportsimulator.items.components.AItemPart;
@@ -357,10 +358,20 @@ public abstract class AEntityF_Multipart<JSONDefinition extends AJSONPartProvide
             if (hitEntry.box.groupDef != null && (hitEntry.box.groupDef.armorThickness != 0 || hitEntry.box.groupDef.heatArmorThickness != 0)) {
                 hitOperationalHitbox = true;
                 if (bullet != null) {
-                    double armorThickness = hitEntry.box.definition != null ? (bullet.definition.bullet.isHeat && hitEntry.box.groupDef.heatArmorThickness != 0 ? hitEntry.box.groupDef.heatArmorThickness : hitEntry.box.groupDef.armorThickness) : 0;
-                    double penetrationPotential = bullet.definition.bullet.isHeat ? bullet.definition.bullet.armorPenetration : (bullet.definition.bullet.armorPenetration * bullet.velocity / bullet.initialVelocity);
-                    bullet.armorPenetrated += armorThickness;
-                    bullet.displayDebugMessage("HIT ARMOR OF: " + (int) armorThickness);
+                    boolean bulletIsHeat = bullet.definition.bullet.types.contains(BulletType.HEAT) || bullet.definition.bullet.isHeat;
+                    double armorThickness = hitEntry.box.definition != null ? (bulletIsHeat && hitEntry.box.groupDef.heatArmorThickness != 0 ? hitEntry.box.groupDef.heatArmorThickness : hitEntry.box.groupDef.armorThickness) : 0;
+                    double penetrationPotential = bulletIsHeat ? bullet.definition.bullet.armorPenetration : (bullet.definition.bullet.armorPenetration * bullet.velocity / bullet.initialVelocity);
+
+                    //For non-HEAT kinetic rounds (AP and subcaliber), reduce remaining penetration based on armor thickness.
+                    //Penetration loss is proportional to (armorThickness / penetrationPotential)^2, simulating energy loss.
+                    if (!bulletIsHeat && armorThickness > 0 && penetrationPotential > 0) {
+                        double ratio = armorThickness / penetrationPotential;
+                        double penetrationLoss = armorThickness * (1.0 + ratio);
+                        bullet.armorPenetrated += penetrationLoss;
+                    } else {
+                        bullet.armorPenetrated += armorThickness;
+                    }
+                    bullet.displayDebugMessage("HIT ARMOR OF: " + (int) armorThickness + "  CUMULATIVE PEN USED: " + (int) bullet.armorPenetrated);
 
                     if (bullet.armorPenetrated > penetrationPotential) {
                         //Bullet hit too much armor.
@@ -372,6 +383,60 @@ public abstract class AEntityF_Multipart<JSONDefinition extends AJSONPartProvide
                         }
                         bullet.displayDebugMessage("HIT TOO MUCH ARMOR.  MAX PEN: " + (int) penetrationPotential);
                         return EntityBullet.HitType.ARMOR;
+                    }
+
+                    //If the bullet has FRAG type and penetrated armor, deal fragmentation damage to internals.
+                    if (bullet.definition.bullet.types.contains(BulletType.FRAG) && bullet.definition.bullet.fragDamage > 0) {
+                        float coneAngle = bullet.definition.bullet.fragConeAngle > 0 ? bullet.definition.bullet.fragConeAngle : 45.0f;
+                        float hitProbability = bullet.definition.bullet.fragHitProbability > 0 ? bullet.definition.bullet.fragHitProbability : 0.5f;
+                        float fragDmg = bullet.definition.bullet.fragDamage;
+                        double coneAngleRad = Math.toRadians(coneAngle / 2.0);
+                        double coneRange = bullet.definition.bullet.diameter / 100.0;
+
+                        //Check all parts on this entity for fragmentation hits within the cone.
+                        for (APart part : allParts) {
+                            double distToPart = hitEntry.position.distanceTo(part.position);
+                            if (distToPart <= coneRange && distToPart > 0) {
+                                //Check if part is within the cone angle from bullet's motion direction.
+                                Point3D toPartVector = part.position.copy().subtract(hitEntry.position);
+                                double angleToPart = Math.acos(toPartVector.dotProduct(bullet.motion) / (toPartVector.length() * bullet.motion.length()));
+                                if (angleToPart <= coneAngleRad) {
+                                    //Roll for hit probability.
+                                    if (Math.random() <= hitProbability) {
+                                        Damage fragDamage = new Damage(fragDmg, part.boundingBox, bullet.gun, bullet.gun.lastController, null);
+                                        fragDamage.ignoreCooldown = true;
+                                        if (world.isClient()) {
+                                            InterfaceManager.packetInterface.sendToServer(new PacketEntityBulletHitEntity(bullet.gun, part, fragDamage));
+                                        } else {
+                                            EntityBullet.performEntityHitLogic(part, fragDamage);
+                                        }
+                                        bullet.displayDebugMessage("FRAG HIT PART: " + part.definition.systemName + " FOR " + (int) fragDmg + " DAMAGE");
+                                    }
+                                }
+                            }
+                        }
+
+                        //Also check riders (crew) on all parts for fragmentation damage.
+                        for (APart part : allParts) {
+                            if (part.rider != null) {
+                                IWrapperEntity partRider = part.rider;
+                                double distToRider = hitEntry.position.distanceTo(partRider.getPosition());
+                                if (distToRider <= coneRange && distToRider > 0) {
+                                    Point3D toRiderVector = partRider.getPosition().copy().subtract(hitEntry.position);
+                                    double angleToRider = Math.acos(toRiderVector.dotProduct(bullet.motion) / (toRiderVector.length() * bullet.motion.length()));
+                                    if (angleToRider <= coneAngleRad) {
+                                        if (Math.random() <= hitProbability) {
+                                            Damage fragDamage = new Damage(fragDmg, part.boundingBox, bullet.gun, bullet.gun.lastController, null);
+                                            fragDamage.ignoreCooldown = true;
+                                            if (!world.isClient()) {
+                                                partRider.attack(fragDamage);
+                                            }
+                                            bullet.displayDebugMessage("FRAG HIT CREW MEMBER: " + partRider.getName() + " FOR " + (int) fragDmg + " DAMAGE");
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                 } else {
                     //Not a bullet, but hit armor, 100% stopping power with no damage.
