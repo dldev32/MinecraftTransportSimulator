@@ -43,6 +43,7 @@ import minecrafttransportsimulator.mcinterface.IWrapperPlayer;
 import minecrafttransportsimulator.mcinterface.InterfaceManager;
 import minecrafttransportsimulator.packets.instances.PacketEntityBulletHitCollision;
 import minecrafttransportsimulator.packets.instances.PacketEntityBulletHitEntity;
+import minecrafttransportsimulator.packets.instances.PacketEntityBulletHitExternalEntity;
 import minecrafttransportsimulator.packets.instances.PacketEntityBulletHitGeneric;
 import minecrafttransportsimulator.packets.instances.PacketPartChange_Add;
 import minecrafttransportsimulator.packets.instances.PacketPartChange_Remove;
@@ -428,8 +429,10 @@ public abstract class AEntityF_Multipart<JSONDefinition extends AJSONPartProvide
                                         if (Math.random() <= hitProbability) {
                                             Damage fragDamage = new Damage(fragDmg, part.boundingBox, bullet.gun, bullet.gun.lastController, null);
                                             fragDamage.ignoreCooldown = true;
-                                            if (!world.isClient()) {
-                                                partRider.attack(fragDamage);
+                                            if (world.isClient()) {
+                                                InterfaceManager.packetInterface.sendToServer(new PacketEntityBulletHitExternalEntity(partRider, fragDamage));
+                                            } else {
+                                                EntityBullet.performExternalEntityHitLogic(partRider, fragDamage);
                                             }
                                             bullet.displayDebugMessage("FRAG HIT CREW MEMBER: " + partRider.getName() + " FOR " + (int) fragDmg + " DAMAGE");
                                         }
@@ -437,6 +440,42 @@ public abstract class AEntityF_Multipart<JSONDefinition extends AJSONPartProvide
                                 }
                             }
                         }
+                    }
+
+                    //HEAT shells detonate on armor contact and do not continue flying.
+                    //If penetration was successful, apply post-penetration damage to the vehicle and crew
+                    //proportional to the residual penetration potential.
+                    if (bulletIsHeat) {
+                        double residualRatio = (penetrationPotential - bullet.armorPenetrated) / penetrationPotential;
+                        if (residualRatio > 0) {
+                            double postPenDamage = bullet.definition.bullet.damage * residualRatio;
+                            Damage heatDamage = new Damage(bullet.gun, hitEntry.box, postPenDamage);
+                            if (world.isClient()) {
+                                InterfaceManager.packetInterface.sendToServer(new PacketEntityBulletHitEntity(bullet.gun, hitEntity, heatDamage));
+                                for (APart part : allParts) {
+                                    if (part.rider != null) {
+                                        InterfaceManager.packetInterface.sendToServer(new PacketEntityBulletHitExternalEntity(part.rider, heatDamage));
+                                    }
+                                }
+                            } else {
+                                EntityBullet.performEntityHitLogic(hitEntity, heatDamage);
+                                for (APart part : allParts) {
+                                    if (part.rider != null) {
+                                        EntityBullet.performExternalEntityHitLogic(part.rider, heatDamage);
+                                    }
+                                }
+                            }
+                            bullet.displayDebugMessage("HEAT POST-PEN DAMAGE: " + (int) postPenDamage + " RESIDUAL: " + (int) (residualRatio * 100) + "%");
+                        }
+
+                        if (world.isClient()) {
+                            InterfaceManager.packetInterface.sendToServer(new PacketEntityBulletHitGeneric(bullet.gun, bullet.bulletNumber, hitEntry.position, hitEntry.side, HitType.ARMOR));
+                            bullet.waitingOnActionPacket = true;
+                        } else {
+                            EntityBullet.performGenericHitLogic(bullet.gun, bullet.bulletNumber, hitEntry.position, hitEntry.side, HitType.ARMOR);
+                        }
+                        bullet.displayDebugMessage("HEAT DETONATED ON ARMOR.  PEN: " + (int) penetrationPotential + " ARMOR: " + (int) bullet.armorPenetrated);
+                        return EntityBullet.HitType.ARMOR;
                     }
                 } else {
                     //Not a bullet, but hit armor, 100% stopping power with no damage.
