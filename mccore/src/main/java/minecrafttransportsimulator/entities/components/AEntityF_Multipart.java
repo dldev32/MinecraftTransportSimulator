@@ -399,7 +399,7 @@ public abstract class AEntityF_Multipart<JSONDefinition extends AJSONPartProvide
                             if (distToPart <= coneRange && distToPart > 0) {
                                 //Check if part is within the cone angle from bullet's motion direction.
                                 Point3D toPartVector = part.position.copy().subtract(hitEntry.position);
-                                double angleToPart = Math.acos(toPartVector.dotProduct(bullet.motion) / (toPartVector.length() * bullet.motion.length()));
+                                double angleToPart = Math.acos(toPartVector.dotProduct(bullet.motion, false) / (toPartVector.length() * bullet.motion.length()));
                                 if (angleToPart <= coneAngleRad) {
                                     //Roll for hit probability.
                                     if (Math.random() <= hitProbability) {
@@ -423,7 +423,7 @@ public abstract class AEntityF_Multipart<JSONDefinition extends AJSONPartProvide
                                 double distToRider = hitEntry.position.distanceTo(partRider.getPosition());
                                 if (distToRider <= coneRange && distToRider > 0) {
                                     Point3D toRiderVector = partRider.getPosition().copy().subtract(hitEntry.position);
-                                    double angleToRider = Math.acos(toRiderVector.dotProduct(bullet.motion) / (toRiderVector.length() * bullet.motion.length()));
+                                    double angleToRider = Math.acos(toRiderVector.dotProduct(bullet.motion, false) / (toRiderVector.length() * bullet.motion.length()));
                                     if (angleToRider <= coneAngleRad) {
                                         if (Math.random() <= hitProbability) {
                                             Damage fragDamage = new Damage(fragDmg, part.boundingBox, bullet.gun, bullet.gun.lastController, null);
