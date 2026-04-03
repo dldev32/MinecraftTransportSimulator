@@ -392,26 +392,30 @@ public abstract class AEntityF_Multipart<JSONDefinition extends AJSONPartProvide
                         float hitProbability = bullet.definition.bullet.fragHitProbability > 0 ? bullet.definition.bullet.fragHitProbability : 0.5f;
                         float fragDmg = bullet.definition.bullet.fragDamage;
                         double coneAngleRad = Math.toRadians(coneAngle / 2.0);
-                        double coneRange = bullet.definition.bullet.diameter / 100.0;
+                        double coneRange = bullet.definition.bullet.diameter / 10.0;
+                        bullet.displayDebugMessage("FRAG ACTIVATED: CONE=" + (int) coneAngle + "deg RANGE=" + String.format("%.1f", coneRange) + "m PROB=" + hitProbability + " PARTS=" + allParts.size());
 
                         //Check all parts on this entity for fragmentation hits within the cone.
                         for (APart part : allParts) {
                             double distToPart = hitEntry.position.distanceTo(part.position);
-                            if (distToPart <= coneRange && distToPart > 0) {
+                            if (distToPart <= coneRange) {
                                 //Check if part is within the cone angle from bullet's motion direction.
                                 Point3D toPartVector = part.position.copy().subtract(hitEntry.position);
-                                double angleToPart = Math.acos(toPartVector.dotProduct(bullet.motion, false) / (toPartVector.length() * bullet.motion.length()));
-                                if (angleToPart <= coneAngleRad) {
-                                    //Roll for hit probability.
-                                    if (Math.random() <= hitProbability) {
-                                        Damage fragDamage = new Damage(fragDmg, part.boundingBox, bullet.gun, bullet.gun.lastController, null);
-                                        fragDamage.ignoreCooldown = true;
-                                        if (world.isClient()) {
-                                            InterfaceManager.packetInterface.sendToServer(new PacketEntityBulletHitEntity(bullet.gun, part, fragDamage));
-                                        } else {
-                                            EntityBullet.performEntityHitLogic(part, fragDamage);
+                                double toPartLen = toPartVector.length();
+                                if (toPartLen > 0) {
+                                    double angleToPart = Math.acos(toPartVector.dotProduct(bullet.motion, false) / (toPartLen * bullet.motion.length()));
+                                    if (angleToPart <= coneAngleRad) {
+                                        //Roll for hit probability.
+                                        if (Math.random() <= hitProbability) {
+                                            Damage fragDamage = new Damage(fragDmg, part.boundingBox, bullet.gun, bullet.gun.lastController, null);
+                                            fragDamage.ignoreCooldown = true;
+                                            if (world.isClient()) {
+                                                InterfaceManager.packetInterface.sendToServer(new PacketEntityBulletHitEntity(bullet.gun, part, fragDamage));
+                                            } else {
+                                                EntityBullet.performEntityHitLogic(part, fragDamage);
+                                            }
+                                            bullet.displayDebugMessage("FRAG HIT PART: " + part.definition.systemName + " FOR " + (int) fragDmg + " DMG (dist=" + String.format("%.1f", distToPart) + " angle=" + (int) Math.toDegrees(angleToPart) + "deg)");
                                         }
-                                        bullet.displayDebugMessage("FRAG HIT PART: " + part.definition.systemName + " FOR " + (int) fragDmg + " DAMAGE");
                                     }
                                 }
                             }
@@ -422,19 +426,22 @@ public abstract class AEntityF_Multipart<JSONDefinition extends AJSONPartProvide
                             if (part.rider != null) {
                                 IWrapperEntity partRider = part.rider;
                                 double distToRider = hitEntry.position.distanceTo(partRider.getPosition());
-                                if (distToRider <= coneRange && distToRider > 0) {
+                                if (distToRider <= coneRange) {
                                     Point3D toRiderVector = partRider.getPosition().copy().subtract(hitEntry.position);
-                                    double angleToRider = Math.acos(toRiderVector.dotProduct(bullet.motion, false) / (toRiderVector.length() * bullet.motion.length()));
-                                    if (angleToRider <= coneAngleRad) {
-                                        if (Math.random() <= hitProbability) {
-                                            Damage fragDamage = new Damage(fragDmg, part.boundingBox, bullet.gun, bullet.gun.lastController, null);
-                                            fragDamage.ignoreCooldown = true;
-                                            if (world.isClient()) {
-                                                InterfaceManager.packetInterface.sendToServer(new PacketEntityBulletHitExternalEntity(partRider, fragDamage));
-                                            } else {
-                                                EntityBullet.performExternalEntityHitLogic(partRider, fragDamage);
+                                    double toRiderLen = toRiderVector.length();
+                                    if (toRiderLen > 0) {
+                                        double angleToRider = Math.acos(toRiderVector.dotProduct(bullet.motion, false) / (toRiderLen * bullet.motion.length()));
+                                        if (angleToRider <= coneAngleRad) {
+                                            if (Math.random() <= hitProbability) {
+                                                Damage fragDamage = new Damage(fragDmg, part.boundingBox, bullet.gun, bullet.gun.lastController, null);
+                                                fragDamage.ignoreCooldown = true;
+                                                if (world.isClient()) {
+                                                    InterfaceManager.packetInterface.sendToServer(new PacketEntityBulletHitExternalEntity(partRider, fragDamage));
+                                                } else {
+                                                    EntityBullet.performExternalEntityHitLogic(partRider, fragDamage);
+                                                }
+                                                bullet.displayDebugMessage("FRAG HIT CREW: " + partRider.getName() + " FOR " + (int) fragDmg + " DMG (dist=" + String.format("%.1f", distToRider) + " angle=" + (int) Math.toDegrees(angleToRider) + "deg)");
                                             }
-                                            bullet.displayDebugMessage("FRAG HIT CREW MEMBER: " + partRider.getName() + " FOR " + (int) fragDmg + " DAMAGE");
                                         }
                                     }
                                 }
