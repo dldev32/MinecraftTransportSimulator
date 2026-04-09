@@ -135,6 +135,10 @@ public class JSONBullet extends AJSONMultiModelProvider {
         SUBCALIBER,
         @JSONDescription("A bullet that produces fragmentation upon penetrating armor.  Fragments deal damage to internal components and crew based on the bullet's fragConeAngle, fragHitProbability, and fragDamage parameters.")
         FRAG,
+        @JSONDescription("A guided missile.  Uses guidance and turn rate parameters for tracking targets.")
+        MISSILE,
+        @JSONDescription("An unguided bomb.  Dropped from a gun with zero muzzle velocity, affected by gravity.")
+        BOMB,
         @JSONDescription("A bullet that has a custom function defined in code. Useful for integration with a variety of mods, regardless of version.")
         CUSTOM
     }

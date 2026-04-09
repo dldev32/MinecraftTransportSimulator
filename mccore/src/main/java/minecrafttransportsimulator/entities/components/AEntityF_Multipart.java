@@ -372,7 +372,7 @@ public abstract class AEntityF_Multipart<JSONDefinition extends AJSONPartProvide
                     } else {
                         bullet.armorPenetrated += armorThickness;
                     }
-                    bullet.displayDebugMessage("HIT ARMOR OF: " + (int) armorThickness + "  CUMULATIVE PEN USED: " + (int) bullet.armorPenetrated);
+                    bullet.displayDebugMessage("HIT ARMOR OF: " + (int) armorThickness);
 
                     if (bullet.armorPenetrated > penetrationPotential) {
                         //Bullet hit too much armor.
@@ -393,7 +393,7 @@ public abstract class AEntityF_Multipart<JSONDefinition extends AJSONPartProvide
                         float fragDmg = bullet.definition.bullet.fragDamage;
                         double coneAngleRad = Math.toRadians(coneAngle / 2.0);
                         double coneRange = bullet.definition.bullet.diameter / 10.0;
-                        bullet.displayDebugMessage("FRAG ACTIVATED: CONE=" + (int) coneAngle + "deg RANGE=" + String.format("%.1f", coneRange) + "m PROB=" + hitProbability + " PARTS=" + allParts.size());
+                        bullet.displayDebugMessage("FRAG ACTIVATED");
 
                         //Check all parts on this entity for fragmentation hits within the cone.
                         for (APart part : allParts) {
@@ -414,7 +414,7 @@ public abstract class AEntityF_Multipart<JSONDefinition extends AJSONPartProvide
                                             } else {
                                                 EntityBullet.performEntityHitLogic(part, fragDamage);
                                             }
-                                            bullet.displayDebugMessage("FRAG HIT PART: " + part.definition.systemName + " FOR " + (int) fragDmg + " DMG (dist=" + String.format("%.1f", distToPart) + " angle=" + (int) Math.toDegrees(angleToPart) + "deg)");
+                                            bullet.displayDebugMessage("FRAG HIT PART: " + part.definition.systemName + " FOR " + (int) fragDmg);
                                         }
                                     }
                                 }
@@ -440,7 +440,7 @@ public abstract class AEntityF_Multipart<JSONDefinition extends AJSONPartProvide
                                                 } else {
                                                     EntityBullet.performExternalEntityHitLogic(partRider, fragDamage);
                                                 }
-                                                bullet.displayDebugMessage("FRAG HIT CREW: " + partRider.getName() + " FOR " + (int) fragDmg + " DMG (dist=" + String.format("%.1f", distToRider) + " angle=" + (int) Math.toDegrees(angleToRider) + "deg)");
+                                                bullet.displayDebugMessage("FRAG HIT CREW: " + partRider.getName() + " FOR " + (int) fragDmg);
                                             }
                                         }
                                     }
@@ -472,7 +472,7 @@ public abstract class AEntityF_Multipart<JSONDefinition extends AJSONPartProvide
                                     }
                                 }
                             }
-                            bullet.displayDebugMessage("HEAT POST-PEN DAMAGE: " + (int) postPenDamage + " RESIDUAL: " + (int) (residualRatio * 100) + "%");
+                            bullet.displayDebugMessage("HEAT POST-PEN DAMAGE: " + (int) postPenDamage);
                         }
 
                         if (world.isClient()) {
@@ -481,7 +481,7 @@ public abstract class AEntityF_Multipart<JSONDefinition extends AJSONPartProvide
                         } else {
                             EntityBullet.performGenericHitLogic(bullet.gun, bullet.bulletNumber, hitEntry.position, hitEntry.side, HitType.ARMOR);
                         }
-                        bullet.displayDebugMessage("HEAT DETONATED ON ARMOR.  PEN: " + (int) penetrationPotential + " ARMOR: " + (int) bullet.armorPenetrated);
+                        bullet.displayDebugMessage("HEAT DETONATED ON ARMOR");
                         return EntityBullet.HitType.ARMOR;
                     }
                 } else {
