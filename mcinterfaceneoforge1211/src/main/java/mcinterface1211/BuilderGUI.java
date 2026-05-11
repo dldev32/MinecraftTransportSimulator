@@ -70,6 +70,14 @@ public class BuilderGUI extends Screen {
         return true;
     }
 
+    @Override
+    public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
+        if (gui.onMouseDragged((int) mouseX, (int) mouseY)) {
+            return true;
+        }
+        return super.mouseDragged(mouseX, mouseY, button, dragX, dragY);
+    }
+
     /**
      * This is called by the main MC system for keyboard events.  We Override it here to check
      * to forward the inputs to focused textBoxes for further processing.

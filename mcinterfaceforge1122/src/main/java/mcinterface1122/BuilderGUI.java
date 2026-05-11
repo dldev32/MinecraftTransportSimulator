@@ -63,6 +63,13 @@ public class BuilderGUI extends GuiScreen {
         gui.onRelease();
     }
 
+    @Override
+    protected void mouseClickMove(int mouseX, int mouseY, int clickedMouseButton, long timeSinceLastClick) {
+        if (!gui.onMouseDragged(mouseX, mouseY)) {
+            super.mouseClickMove(mouseX, mouseY, clickedMouseButton, timeSinceLastClick);
+        }
+    }
+
     /**
      * This is called by the main MC system for keyboard events.  We Override it here to check
      * to forward the inputs to focused textBoxes for further processing.

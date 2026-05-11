@@ -144,6 +144,14 @@ public abstract class AGUIBase {
     }
 
     /**
+     * Called when the mouse is dragged while a button is held down.
+     * Returns true if this GUI consumed the drag.
+     */
+    public boolean onMouseDragged(int mouseX, int mouseY) {
+        return false;
+    }
+
+    /**
      * Called to render the components in this GUI.  This is a final method to discourage manual rendering
      * and instead force use of the component-based rendering that provides a state-safe framework.
      */
