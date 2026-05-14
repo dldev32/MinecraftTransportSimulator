@@ -57,7 +57,7 @@ public class GUIComponentVehicleDebug extends AGUIComponent {
 
     @Override
     public void render(AGUIBase gui, int mouseX, int mouseY, boolean renderBright, boolean renderLitTexture, boolean blendingEnabled, float partialTicks) {
-        if (!ConfigSystem.settings.general.devMode.value) {
+        if (!ConfigSystem.settings.general.devMode.value || !ConfigSystem.settings.general.vehicleStatusPanel.value) {
             return;
         }
 

@@ -561,6 +561,23 @@
     "input.look_lr": "Mirar izquierda/derecha",
     "input.shift_7": "Marcha 7",
     "input.shift_8": "Marcha 8",
-    "input.shift_9": "Marcha 9"
+    "input.shift_9": "Marcha 9",
+    "gui.config.category.general": "General",
+    "gui.config.category.audio": "Audio",
+    "gui.config.category.vehicle_physics": "Física de vehículos",
+    "gui.config.category.damage": "Daño",
+    "gui.config.mouse.left": "Ratón izquierdo",
+    "gui.config.mouse.right": "Ratón derecho",
+    "gui.config.mouse.middle": "Ratón central",
+    "gui.config.mouse.numbered": "Ratón %d",
+    "gui.config.setting.arcadeMode": "Vuelo arcade con ratón",
+    "gui.config.setting.dismountSafetySpeed": "Velocidad segura para desmontar",
+    "gui.config.setting.vehicleStatusPanel": "Panel de estado del vehículo",
+    "gui.config.aircraft_control.off": "Desactivado",
+    "gui.config.aircraft_control.classic": "Clásico",
+    "gui.config.aircraft_control.arcade": "Arcade",
+    "gui.config.setting.aircraftControlMode": "Modo de control de aviones",
+    "gui.config.setting.aircraftControlMode.tooltip": "Elige si los aviones usan teclado, yugo clásico con ratón o vuelo arcade con ratón.",
+    "gui.config.setting.aimAssist": "Ayuda de mira"
   }
 }

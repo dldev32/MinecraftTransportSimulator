@@ -541,6 +541,23 @@
     "input.shift_7": "Gang 7",
     "input.shift_8": "Gang 8",
     "input.shift_9": "Gang 9",
-    "input.shift_r": "Rückwärtsgang"
+    "input.shift_r": "Rückwärtsgang",
+    "gui.config.category.general": "Allgemein",
+    "gui.config.category.audio": "Audio",
+    "gui.config.category.vehicle_physics": "Fahrzeugphysik",
+    "gui.config.category.damage": "Schaden",
+    "gui.config.mouse.left": "Linke Maustaste",
+    "gui.config.mouse.right": "Rechte Maustaste",
+    "gui.config.mouse.middle": "Mittlere Maustaste",
+    "gui.config.mouse.numbered": "Maustaste %d",
+    "gui.config.setting.arcadeMode": "Arcade-Mausflug",
+    "gui.config.setting.dismountSafetySpeed": "Sichere Ausstiegsgeschwindigkeit",
+    "gui.config.setting.vehicleStatusPanel": "Fahrzeugstatusanzeige",
+    "gui.config.aircraft_control.off": "Aus",
+    "gui.config.aircraft_control.classic": "Klassisch",
+    "gui.config.aircraft_control.arcade": "Arcade",
+    "gui.config.setting.aircraftControlMode": "Flugzeugsteuerung",
+    "gui.config.setting.aircraftControlMode.tooltip": "Legt fest, ob Flugzeuge Tastatureingaben, das klassische Maus-Steuerhorn oder Arcade-Mausflug verwenden.",
+    "gui.config.setting.aimAssist": "Zielhilfe"
   }
 }

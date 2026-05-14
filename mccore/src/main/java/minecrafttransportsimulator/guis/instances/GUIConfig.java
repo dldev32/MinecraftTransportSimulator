@@ -56,6 +56,7 @@ public class GUIConfig extends AGUIBase {
     private static final int SCROLL_TRACK_WIDTH = scale(4);
     private static final int SCROLL_THUMB_WIDTH = scale(8);
     private static final int SCROLL_THUMB_MIN_HEIGHT = scale(18);
+    private static final double OUTLINE_THICKNESS = 0.5D;
 
     private static int scale(int value) {
         return Math.max(1, Math.round(value * GUI_SCALE));
@@ -298,40 +299,82 @@ public class GUIConfig extends AGUIBase {
     }
 
     private void addSettingRows() {
-        populateSettingRows(clientSettingRows, ConfigSystem.client.controlSettings, "client.control", false);
+        populateClientRows();
         populateSettingRows(renderingSettingRows, ConfigSystem.client.renderingSettings, "client.rendering", true);
         populateServerRows();
         developmentSettingRows.add(new SettingRow("server.general.devMode", "devMode", ConfigSystem.settings.general.devMode, LanguageSystem.GUI_CONFIG_SETTING_DEV_MODE, null, SettingType.BOOLEAN));
+        developmentSettingRows.add(new SettingRow("server.general.vehicleStatusPanel", "vehicleStatusPanel", ConfigSystem.settings.general.vehicleStatusPanel, LanguageSystem.GUI_CONFIG_SETTING_VEHICLE_STATUS_PANEL, null, SettingType.BOOLEAN));
+    }
+
+    private void populateClientRows() {
+        addSettingHeader(clientSettingRows, LanguageSystem.GUI_CONFIG_CATEGORY_GENERAL);
+        addClientRow("kbOverride");
+        addClientRow("north360");
+        addAircraftControlModeRow();
+        addClientRow("aimAssist");
+        addClientRow("classicJystk");
+        addClientRow("DismountSafteySpeed");
+
+        addSettingHeader(clientSettingRows, LanguageSystem.GUI_CONFIG_CONTROLS_GROUND);
+        addClientRow("simpleThrottle");
+        addClientRow("halfThrottle");
+        addClientRow("autostartEng");
+        addClientRow("autoTrnSignals");
+        addClientRow("useShifter");
+        addClientRow("steeringControlRate");
+        addClientRow("steeringReturnRate");
+
+        addSettingHeader(clientSettingRows, LanguageSystem.GUI_CONFIG_CONTROLS_AIRCRAFT);
+        addClientRow("heliAutoLevel");
+        addClientRow("flightControlRate");
+        addClientRow("mouseYokeRate");
+
+        addSettingHeader(clientSettingRows, LanguageSystem.GUI_CONFIG_CATEGORY_AUDIO);
+        addClientRow("soundVolume");
+        addClientRow("radioVolume");
+    }
+
+    private void addClientRow(String fieldName) {
+        addConfigRow(clientSettingRows, ConfigSystem.client.controlSettings, "client.control", fieldName, false);
     }
 
     @SuppressWarnings("unchecked")
     private void populateSettingRows(List<SettingRow> rows, Object configObject, String idPrefix, boolean includeRenderingMode) {
         for (Field field : configObject.getClass().getFields()) {
             if (field.getType().equals(JSONConfigEntry.class)) {
-                try {
-                    JSONConfigEntry<?> entry = (JSONConfigEntry<?>) field.get(configObject);
-                    if ("joystickDeadZone".equals(field.getName())) {
-                        continue;
-                    } else if (entry.value instanceof Boolean) {
-                        rows.add(new SettingRow(idPrefix + "." + field.getName(), field.getName(), (JSONConfigEntry<Boolean>) entry, getSettingLabel(field.getName()), null, SettingType.BOOLEAN));
-                    } else if (includeRenderingMode && "renderingMode".equals(field.getName())) {
-                        rows.add(new SettingRow(idPrefix + "." + field.getName(), field.getName(), entry, getSettingLabel(field.getName()), null, SettingType.MODE));
-                    } else if (entry.value instanceof Number) {
-                        rows.add(new SettingRow(idPrefix + "." + field.getName(), field.getName(), entry, getSettingLabel(field.getName()), getNumericMetadata(field.getName()), SettingType.NUMBER));
-                    }
-                } catch (Exception e) {
-                    //Skip only this row if reflection fails.  The rest of the GUI can still work.
-                }
+                addConfigRow(rows, configObject, idPrefix, field.getName(), includeRenderingMode);
             }
         }
     }
 
+    @SuppressWarnings("unchecked")
+    private void addConfigRow(List<SettingRow> rows, Object configObject, String idPrefix, String fieldName, boolean includeRenderingMode) {
+        try {
+            Field field = configObject.getClass().getField(fieldName);
+            JSONConfigEntry<?> entry = (JSONConfigEntry<?>) field.get(configObject);
+            if ("joystickDeadZone".equals(fieldName)) {
+                return;
+            } else if (entry.value instanceof Boolean) {
+                rows.add(new SettingRow(idPrefix + "." + fieldName, fieldName, (JSONConfigEntry<Boolean>) entry, getSettingLabel(fieldName), null, SettingType.BOOLEAN));
+            } else if (includeRenderingMode && "renderingMode".equals(fieldName)) {
+                rows.add(new SettingRow(idPrefix + "." + fieldName, fieldName, entry, getSettingLabel(fieldName), null, SettingType.MODE));
+            } else if (entry.value instanceof Number) {
+                rows.add(new SettingRow(idPrefix + "." + fieldName, fieldName, entry, getSettingLabel(fieldName), getNumericMetadata(fieldName), SettingType.NUMBER));
+            }
+        } catch (Exception e) {
+            //Skip only this row if reflection fails.  The rest of the GUI can still work.
+        }
+    }
+
     private void populateServerRows() {
+        addSettingHeader(serverSettingRows, LanguageSystem.GUI_CONFIG_CATEGORY_GENERAL);
         addServerRow("server.general.keyRequiredToStartVehicles", "keyRequiredToStartVehicles", ConfigSystem.settings.general.keyRequiredToStartVehicles, LanguageSystem.GUI_CONFIG_SETTING_KEY_REQUIRED);
         addServerRow("server.general.noclipVehicles", "noclipVehicles", ConfigSystem.settings.general.noclipVehicles, LanguageSystem.GUI_CONFIG_SETTING_NOCLIP_VEHICLES);
         addServerRow("server.general.chunkloadVehicles", "chunkloadVehicles", ConfigSystem.settings.general.chunkloadVehicles, LanguageSystem.GUI_CONFIG_SETTING_CHUNKLOAD_VEHICLES);
         addServerRow("server.general.giveManualsOnJoin", "giveManualsOnJoin", ConfigSystem.settings.general.giveManualsOnJoin, LanguageSystem.GUI_CONFIG_SETTING_GIVE_MANUALS);
         addServerRow("server.general.performModCompatFunctions", "performModCompatFunctions", ConfigSystem.settings.general.performModCompatFunctions, LanguageSystem.GUI_CONFIG_SETTING_MOD_COMPAT);
+
+        addSettingHeader(serverSettingRows, LanguageSystem.GUI_CONFIG_CATEGORY_VEHICLE_PHYSICS);
         addServerRow("server.general.aircraftSpeedFactor", "aircraftSpeedFactor", ConfigSystem.settings.general.aircraftSpeedFactor, LanguageSystem.GUI_CONFIG_SETTING_AIRCRAFT_SPEED_FACTOR);
         addServerRow("server.general.carSpeedFactor", "carSpeedFactor", ConfigSystem.settings.general.carSpeedFactor, LanguageSystem.GUI_CONFIG_SETTING_CAR_SPEED_FACTOR);
         addServerRow("server.general.fuelUsageFactor", "fuelUsageFactor", ConfigSystem.settings.general.fuelUsageFactor, LanguageSystem.GUI_CONFIG_SETTING_FUEL_USAGE_FACTOR);
@@ -339,6 +382,8 @@ public class GUIConfig extends AGUIBase {
         addServerRow("server.general.gravityFactor", "gravityFactor", ConfigSystem.settings.general.gravityFactor, LanguageSystem.GUI_CONFIG_SETTING_GRAVITY_FACTOR);
         addServerRow("server.general.maxFlightHeight", "maxFlightHeight", ConfigSystem.settings.general.maxFlightHeight, LanguageSystem.GUI_CONFIG_SETTING_MAX_FLIGHT_HEIGHT);
         addServerRow("server.general.seaLevel", "seaLevel", ConfigSystem.settings.general.seaLevel, LanguageSystem.GUI_CONFIG_SETTING_SEA_LEVEL);
+
+        addSettingHeader(serverSettingRows, LanguageSystem.GUI_CONFIG_CATEGORY_DAMAGE);
         addServerRow("server.damage.bulletBlockBreaking", "bulletBlockBreaking", ConfigSystem.settings.damage.bulletBlockBreaking, LanguageSystem.GUI_CONFIG_SETTING_BULLET_BLOCK_BREAKING);
         addServerRow("server.damage.bulletExplosions", "bulletExplosions", ConfigSystem.settings.damage.bulletExplosions, LanguageSystem.GUI_CONFIG_SETTING_BULLET_EXPLOSIONS);
         addServerRow("server.damage.vehicleBlockBreaking", "vehicleBlockBreaking", ConfigSystem.settings.damage.vehicleBlockBreaking, LanguageSystem.GUI_CONFIG_SETTING_VEHICLE_BLOCK_BREAKING);
@@ -348,6 +393,14 @@ public class GUIConfig extends AGUIBase {
         addServerRow("server.damage.crashDamageFactor", "crashDamageFactor", ConfigSystem.settings.damage.crashDamageFactor, LanguageSystem.GUI_CONFIG_SETTING_CRASH_DAMAGE_FACTOR);
         addServerRow("server.damage.bulletDamageFactor", "bulletDamageFactor", ConfigSystem.settings.damage.bulletDamageFactor, LanguageSystem.GUI_CONFIG_SETTING_BULLET_DAMAGE_FACTOR);
         addServerRow("server.damage.wheelDamageFactor", "wheelDamageFactor", ConfigSystem.settings.damage.wheelDamageFactor, LanguageSystem.GUI_CONFIG_SETTING_WHEEL_DAMAGE_FACTOR);
+    }
+
+    private void addSettingHeader(List<SettingRow> rows, LanguageEntry title) {
+        rows.add(new SettingRow(title));
+    }
+
+    private void addAircraftControlModeRow() {
+        clientSettingRows.add(new SettingRow("client.control.aircraftControlMode", "aircraftControlMode", LanguageSystem.GUI_CONFIG_SETTING_AIRCRAFT_CONTROL_MODE, LanguageSystem.GUI_CONFIG_SETTING_AIRCRAFT_CONTROL_MODE_TOOLTIP.getCurrentValue(), SettingType.AIRCRAFT_CONTROL_MODE));
     }
 
     private void addServerRow(String id, String fieldName, JSONConfigEntry<?> entry, LanguageEntry label) {
@@ -635,7 +688,9 @@ public class GUIConfig extends AGUIBase {
             boolean visible = rowIndex >= 0 && rowIndex < rowsToRender;
             row.setVisible(visible);
             if (visible) {
-                updateRowBackground(rowIndex, i, guiLeft + listX, guiTop + listY + ROW_HEIGHT * rowIndex, listWidth);
+                if (!row.header) {
+                    updateRowBackground(rowIndex, i, guiLeft + listX, guiTop + listY + ROW_HEIGHT * rowIndex, listWidth);
+                }
                 row.setPosition(guiLeft + listX, guiTop + listY + ROW_HEIGHT * rowIndex, listWidth);
                 row.updateState();
             }
@@ -1017,11 +1072,14 @@ public class GUIConfig extends AGUIBase {
             case "useShifter": return LanguageSystem.GUI_CONFIG_SETTING_USE_SHIFTER;
             case "heliAutoLevel": return LanguageSystem.GUI_CONFIG_SETTING_HELI_AUTO_LEVEL;
             case "mouseYoke": return LanguageSystem.GUI_CONFIG_SETTING_MOUSE_YOKE;
+            case "arcadeMode": return LanguageSystem.GUI_CONFIG_SETTING_ARCADE_MODE;
+            case "aimAssist": return LanguageSystem.GUI_CONFIG_SETTING_AIM_ASSIST;
             case "classicJystk": return LanguageSystem.GUI_CONFIG_SETTING_CLASSIC_JYSTK;
             case "steeringControlRate": return LanguageSystem.GUI_CONFIG_SETTING_STEERING_CONTROL_RATE;
             case "steeringReturnRate": return LanguageSystem.GUI_CONFIG_SETTING_STEERING_RETURN_RATE;
             case "flightControlRate": return LanguageSystem.GUI_CONFIG_SETTING_FLIGHT_CONTROL_RATE;
             case "mouseYokeRate": return LanguageSystem.GUI_CONFIG_SETTING_MOUSE_YOKE_RATE;
+            case "DismountSafteySpeed": return LanguageSystem.GUI_CONFIG_SETTING_DISMOUNT_SAFETY_SPEED;
             case "joystickDeadZone": return LanguageSystem.GUI_CONFIG_SETTING_JOYSTICK_DEADZONE;
             case "soundVolume": return LanguageSystem.GUI_CONFIG_SETTING_SOUND_VOLUME;
             case "radioVolume": return LanguageSystem.GUI_CONFIG_SETTING_RADIO_VOLUME;
@@ -1030,13 +1088,31 @@ public class GUIConfig extends AGUIBase {
     }
 
     private String getKeyboardControlName(ControlsKeyboard control) {
-        return control.config.isMouseButton ? InterfaceManager.inputInterface.getNameForMouseButton(control.config.keyCode) : InterfaceManager.inputInterface.getNameForKeyCode(control.config.keyCode);
+        return control.config.isMouseButton ? getMouseButtonName(control.config.keyCode) : InterfaceManager.inputInterface.getNameForKeyCode(control.config.keyCode);
     }
 
     private String getDynamicControlText(ControlsKeyboardDynamic control) {
-        String modName = control.modControl.config.isMouseButton ? InterfaceManager.inputInterface.getNameForMouseButton(control.modControl.config.keyCode) : InterfaceManager.inputInterface.getNameForKeyCode(control.modControl.config.keyCode);
-        String mainName = control.mainControl.config.isMouseButton ? InterfaceManager.inputInterface.getNameForMouseButton(control.mainControl.config.keyCode) : InterfaceManager.inputInterface.getNameForKeyCode(control.mainControl.config.keyCode);
+        String modName = control.modControl.config.isMouseButton ? getMouseButtonName(control.modControl.config.keyCode) : InterfaceManager.inputInterface.getNameForKeyCode(control.modControl.config.keyCode);
+        String mainName = control.mainControl.config.isMouseButton ? getMouseButtonName(control.mainControl.config.keyCode) : InterfaceManager.inputInterface.getNameForKeyCode(control.mainControl.config.keyCode);
         return modName + " + " + mainName;
+    }
+
+    private String getMouseButtonName(int mouseButton) {
+        String rawName = InterfaceManager.inputInterface.getNameForMouseButton(mouseButton);
+        if ("MOUSE_LEFT".equals(rawName)) {
+            return LanguageSystem.GUI_CONFIG_MOUSE_LEFT.getCurrentValue();
+        } else if ("MOUSE_RIGHT".equals(rawName)) {
+            return LanguageSystem.GUI_CONFIG_MOUSE_RIGHT.getCurrentValue();
+        } else if ("MOUSE_MIDDLE".equals(rawName)) {
+            return LanguageSystem.GUI_CONFIG_MOUSE_MIDDLE.getCurrentValue();
+        } else if (rawName != null && rawName.startsWith("MOUSE_")) {
+            try {
+                return String.format(Locale.ROOT, LanguageSystem.GUI_CONFIG_MOUSE_NUMBERED.getCurrentValue(), Integer.parseInt(rawName.substring(6)));
+            } catch (NumberFormatException e) {
+                return rawName;
+            }
+        }
+        return rawName;
     }
 
     private void setComponentPosition(AGUIComponent component, int x, int y) {
@@ -1130,7 +1206,8 @@ public class GUIConfig extends AGUIBase {
     private enum SettingType {
         BOOLEAN,
         NUMBER,
-        MODE
+        MODE,
+        AIRCRAFT_CONTROL_MODE
     }
 
     private static class NumericMetadata {
@@ -1152,12 +1229,43 @@ public class GUIConfig extends AGUIBase {
         private final LanguageEntry labelLanguage;
         private final NumericMetadata metadata;
         private final SettingType type;
+        private final boolean header;
         private final HoverLabel label;
         private TextButton toggleButton;
         private TextButton minusButton;
         private TextButton plusButton;
         private TextButton modeButton;
         private TextLabel valueLabel;
+
+        private SettingRow(LanguageEntry headerLanguage) {
+            this.id = "header." + headerLanguage.key;
+            this.fieldName = "";
+            this.entry = null;
+            this.labelLanguage = headerLanguage;
+            this.metadata = null;
+            this.type = null;
+            this.header = true;
+            addComponent(label = new HoverLabel(0, 0, 160, 16, "", COLOR_DIM_TEXT, TextAlignment.CENTERED, 1.0F, null));
+        }
+
+        private SettingRow(String id, String fieldName, LanguageEntry labelLanguage, String tooltipText, SettingType type) {
+            this.id = id;
+            this.fieldName = fieldName;
+            this.entry = null;
+            this.labelLanguage = labelLanguage;
+            this.metadata = null;
+            this.type = type;
+            this.header = false;
+            addComponent(label = new HoverLabel(0, 0, 160, 14, "", COLOR_TEXT, TextAlignment.LEFT_ALIGNED, 0.85F, tooltipText));
+            if (type == SettingType.AIRCRAFT_CONTROL_MODE) {
+                addComponent(modeButton = new TextButton(0, 0, 112, 14, "") {
+                    @Override
+                    public void onClicked(boolean leftSide) {
+                        cycleAircraftControlMode();
+                    }
+                });
+            }
+        }
 
         private SettingRow(String id, String fieldName, JSONConfigEntry<?> entry, LanguageEntry labelLanguage, NumericMetadata metadata, SettingType type) {
             this.id = id;
@@ -1166,6 +1274,7 @@ public class GUIConfig extends AGUIBase {
             this.labelLanguage = labelLanguage;
             this.metadata = metadata;
             this.type = type;
+            this.header = false;
             addComponent(label = new HoverLabel(0, 0, 160, 14, "", COLOR_TEXT, TextAlignment.LEFT_ALIGNED, 0.85F, entry.comment));
             if (type == SettingType.BOOLEAN) {
                 addComponent(toggleButton = new TextButton(0, 0, 70, 14, "") {
@@ -1200,6 +1309,27 @@ public class GUIConfig extends AGUIBase {
             }
         }
 
+        private int getAircraftControlMode() {
+            if (ConfigSystem.client.controlSettings.arcadeMode.value) {
+                return 2;
+            } else if (ConfigSystem.client.controlSettings.mouseYoke.value) {
+                return 1;
+            } else {
+                return 0;
+            }
+        }
+
+        private String getAircraftControlModeText(int mode) {
+            switch (mode) {
+                case 1:
+                    return LanguageSystem.GUI_CONFIG_AIRCRAFT_CONTROL_CLASSIC.getCurrentValue();
+                case 2:
+                    return LanguageSystem.GUI_CONFIG_AIRCRAFT_CONTROL_ARCADE.getCurrentValue();
+                default:
+                    return LanguageSystem.GUI_CONFIG_AIRCRAFT_CONTROL_OFF.getCurrentValue();
+            }
+        }
+
         private String getRenderingModeText(int mode) {
             switch (mode) {
                 case 0:
@@ -1213,6 +1343,9 @@ public class GUIConfig extends AGUIBase {
 
         private void setVisible(boolean visible) {
             label.visible = visible;
+            if (header) {
+                return;
+            }
             if (toggleButton != null) {
                 toggleButton.visible = visible;
             }
@@ -1227,6 +1360,10 @@ public class GUIConfig extends AGUIBase {
         }
 
         private void setPosition(int x, int y, int width) {
+            if (header) {
+                setComponentBounds(label, x, y, width, 16);
+                return;
+            }
             int controlRight = x + width - 8;
             int labelWidth = Math.max(80, width - 145);
             setComponentBounds(label, x, y, labelWidth, 14);
@@ -1240,12 +1377,18 @@ public class GUIConfig extends AGUIBase {
                 setComponentBounds(plusButton, controlLeft + 52, y, 16, 14);
             }
             if (modeButton != null) {
-                setComponentBounds(modeButton, controlRight - 68, y, 68, 14);
+                int modeWidth = type == SettingType.AIRCRAFT_CONTROL_MODE ? 86 : 68;
+                int modeCenterOffset = type == SettingType.AIRCRAFT_CONTROL_MODE ? (modeWidth - 68) / 2 : 0;
+                setComponentBounds(modeButton, controlRight - modeWidth + modeCenterOffset, y, modeWidth, 14);
             }
         }
 
         private void updateState() {
             label.text = labelLanguage.getCurrentValue();
+            if (header) {
+                label.color = COLOR_DIM_TEXT;
+                return;
+            }
             label.color = changedSettings.contains(id) ? COLOR_CHANGED : COLOR_TEXT;
             if (toggleButton != null) {
                 toggleButton.text = Boolean.TRUE.equals(entry.value) ? LanguageSystem.GUI_CONFIG_ON.getCurrentValue() : LanguageSystem.GUI_CONFIG_OFF.getCurrentValue();
@@ -1261,8 +1404,7 @@ public class GUIConfig extends AGUIBase {
                 plusButton.textColorOverride = changedSettings.contains(id) ? COLOR_CHANGED : COLOR_TEXT;
             }
             if (modeButton != null) {
-                int mode = ConfigSystem.client.renderingSettings.renderingMode.value;
-                modeButton.text = getRenderingModeText(mode);
+                modeButton.text = type == SettingType.AIRCRAFT_CONTROL_MODE ? getAircraftControlModeText(getAircraftControlMode()) : getRenderingModeText(ConfigSystem.client.renderingSettings.renderingMode.value);
                 modeButton.enabled = true;
                 modeButton.active = false;
                 modeButton.textColorOverride = changedSettings.contains(id) ? COLOR_CHANGED : COLOR_TEXT;
@@ -1279,6 +1421,21 @@ public class GUIConfig extends AGUIBase {
                 ConfigSystem.saveToDisk();
             }
             changedSettings.add(id);
+        }
+
+        private void cycleAircraftControlMode() {
+            int newMode = (getAircraftControlMode() + 1) % 3;
+            if (newMode == 0) {
+                ControlSystem.setMouseYokeEnabled(false, false);
+                ConfigSystem.client.controlSettings.arcadeMode.value = false;
+            } else if (newMode == 1) {
+                ControlSystem.setMouseYokeEnabled(true, false);
+            } else {
+                ControlSystem.setMouseYokeEnabled(false, false);
+                ConfigSystem.client.controlSettings.arcadeMode.value = true;
+            }
+            changedSettings.add(id);
+            ConfigSystem.saveToDisk();
         }
 
         @SuppressWarnings("unchecked")
@@ -1457,7 +1614,7 @@ public class GUIConfig extends AGUIBase {
 
         @Override
         public boolean handleMouseClicked(int mouseButton) {
-            setText(InterfaceManager.inputInterface.getNameForMouseButton(mouseButton));
+            setText(getMouseButtonName(mouseButton));
             control.config.keyCode = mouseButton;
             control.config.isMouseButton = true;
             ConfigSystem.client.controls.keyboard.put(control.systemName, control.config);
@@ -1655,10 +1812,23 @@ public class GUIConfig extends AGUIBase {
         data.render();
     }
 
+    private void drawScaledRect(RenderableData data, double x, double y, int width, int height, double scaleX, double scaleY, ColorRGB color, float alpha, int z) {
+        if (width <= 0 || height <= 0 || scaleX <= 0 || scaleY <= 0) {
+            return;
+        }
+        data.vertexObject.setSpriteProperties(0, 0, 0, width, height, 7 / 256F, 7 / 256F, 8 / 256F, 8 / 256F);
+        data.setColor(color);
+        data.setAlpha(alpha);
+        data.transform.resetTransforms();
+        data.transform.setTranslation(x, -y, z);
+        data.transform.applyScaling(scaleX, scaleY, 1.0D);
+        data.render();
+    }
+
     private void drawOutline(RenderableData data, int x, int y, int width, int height, ColorRGB color, float alpha, int z) {
-        drawRect(data, x, y, width, 1, color, alpha, z);
-        drawRect(data, x, y + height - 1, width, 1, color, alpha, z);
-        drawRect(data, x, y, 1, height, color, alpha, z);
-        drawRect(data, x + width - 1, y, 1, height, color, alpha, z);
+        drawScaledRect(data, x, y, width, 1, 1.0D, OUTLINE_THICKNESS, color, alpha, z);
+        drawScaledRect(data, x, y + height - OUTLINE_THICKNESS, width, 1, 1.0D, OUTLINE_THICKNESS, color, alpha, z);
+        drawScaledRect(data, x, y, 1, height, OUTLINE_THICKNESS, 1.0D, color, alpha, z);
+        drawScaledRect(data, x + width - OUTLINE_THICKNESS, y, 1, height, OUTLINE_THICKNESS, 1.0D, color, alpha, z);
     }
 }

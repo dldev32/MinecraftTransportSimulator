@@ -561,6 +561,23 @@
     "input.look_lr": "Смотреть влево/вправо",
     "input.shift_7": "Передача 7",
     "input.shift_8": "Передача 8",
-    "input.shift_9": "Передача 9"
+    "input.shift_9": "Передача 9",
+    "gui.config.category.general": "Общие",
+    "gui.config.category.audio": "Аудио",
+    "gui.config.category.vehicle_physics": "Физика транспорта",
+    "gui.config.category.damage": "Урон",
+    "gui.config.mouse.left": "Левая кнопка мыши",
+    "gui.config.mouse.right": "Правая кнопка мыши",
+    "gui.config.mouse.middle": "Средняя кнопка мыши",
+    "gui.config.mouse.numbered": "Кнопка мыши %d",
+    "gui.config.setting.arcadeMode": "Аркадное управление мышью",
+    "gui.config.setting.dismountSafetySpeed": "Безопасная скорость выхода",
+    "gui.config.setting.vehicleStatusPanel": "Панель состояния транспорта",
+    "gui.config.aircraft_control.off": "Выкл",
+    "gui.config.aircraft_control.classic": "Классический",
+    "gui.config.aircraft_control.arcade": "Аркадный",
+    "gui.config.setting.aircraftControlMode": "Режим управления самолетами",
+    "gui.config.setting.aircraftControlMode.tooltip": "Выбирает управление самолетами: клавиатура, классический мышиный штурвал или аркадный MouseFlight.",
+    "gui.config.setting.aimAssist": "Прицел-помощник"
   }
 }

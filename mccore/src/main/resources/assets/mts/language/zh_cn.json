@@ -541,6 +541,23 @@
     "input.shift_7": "挡位 7",
     "input.shift_8": "挡位 8",
     "input.shift_9": "挡位 9",
-    "input.shift_r": "倒挡"
+    "input.shift_r": "倒挡",
+    "gui.config.category.general": "常规",
+    "gui.config.category.audio": "音频",
+    "gui.config.category.vehicle_physics": "载具物理",
+    "gui.config.category.damage": "伤害",
+    "gui.config.mouse.left": "鼠标左键",
+    "gui.config.mouse.right": "鼠标右键",
+    "gui.config.mouse.middle": "鼠标中键",
+    "gui.config.mouse.numbered": "鼠标 %d",
+    "gui.config.setting.arcadeMode": "鼠标街机飞行",
+    "gui.config.setting.dismountSafetySpeed": "安全下车速度",
+    "gui.config.setting.vehicleStatusPanel": "载具状态面板",
+    "gui.config.aircraft_control.off": "关闭",
+    "gui.config.aircraft_control.classic": "经典",
+    "gui.config.aircraft_control.arcade": "街机",
+    "gui.config.setting.aircraftControlMode": "飞机控制模式",
+    "gui.config.setting.aircraftControlMode.tooltip": "选择飞机使用键盘输入、经典鼠标驾驶杆或街机鼠标飞行。",
+    "gui.config.setting.aimAssist": "瞄准辅助"
   }
 }

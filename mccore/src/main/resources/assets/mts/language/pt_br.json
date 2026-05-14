@@ -561,6 +561,23 @@
     "input.look_lr": "Olhar esquerda/direita",
     "input.shift_7": "Marcha 7",
     "input.shift_8": "Marcha 8",
-    "input.shift_9": "Marcha 9"
+    "input.shift_9": "Marcha 9",
+    "gui.config.category.general": "Geral",
+    "gui.config.category.audio": "Áudio",
+    "gui.config.category.vehicle_physics": "Física dos veículos",
+    "gui.config.category.damage": "Dano",
+    "gui.config.mouse.left": "Mouse esquerdo",
+    "gui.config.mouse.right": "Mouse direito",
+    "gui.config.mouse.middle": "Mouse do meio",
+    "gui.config.mouse.numbered": "Mouse %d",
+    "gui.config.setting.arcadeMode": "Voo arcade com mouse",
+    "gui.config.setting.dismountSafetySpeed": "Velocidade segura para desmontar",
+    "gui.config.setting.vehicleStatusPanel": "Painel de estado do veículo",
+    "gui.config.aircraft_control.off": "Desativado",
+    "gui.config.aircraft_control.classic": "Clássico",
+    "gui.config.aircraft_control.arcade": "Arcade",
+    "gui.config.setting.aircraftControlMode": "Modo de controle de aviões",
+    "gui.config.setting.aircraftControlMode.tooltip": "Escolhe se os aviões usam teclado, manche clássico pelo mouse ou voo arcade com mouse.",
+    "gui.config.setting.aimAssist": "Assistente de mira"
   }
 }

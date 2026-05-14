@@ -543,6 +543,23 @@
     "input.gun.reload": "銃をリロード",
     "input.look_ud": "上下を見る",
     "input.look_lr": "左右を見る",
-    "input.shift_r": "リバースギア"
+    "input.shift_r": "リバースギア",
+    "gui.config.category.general": "一般",
+    "gui.config.category.audio": "オーディオ",
+    "gui.config.category.vehicle_physics": "車両物理",
+    "gui.config.category.damage": "ダメージ",
+    "gui.config.mouse.left": "左クリック",
+    "gui.config.mouse.right": "右クリック",
+    "gui.config.mouse.middle": "中クリック",
+    "gui.config.mouse.numbered": "マウス %d",
+    "gui.config.setting.arcadeMode": "マウスアーケード飛行",
+    "gui.config.setting.dismountSafetySpeed": "安全降車速度",
+    "gui.config.setting.vehicleStatusPanel": "車両状態パネル",
+    "gui.config.aircraft_control.off": "オフ",
+    "gui.config.aircraft_control.classic": "クラシック",
+    "gui.config.aircraft_control.arcade": "アーケード",
+    "gui.config.setting.aircraftControlMode": "航空機の操作モード",
+    "gui.config.setting.aircraftControlMode.tooltip": "航空機をキーボード入力、クラシックなマウスヨーク、またはアーケードマウス飛行で操作するかを選択します。",
+    "gui.config.setting.aimAssist": "照準アシスト"
   }
 }

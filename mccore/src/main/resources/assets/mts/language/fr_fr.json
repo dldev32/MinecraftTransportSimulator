@@ -561,6 +561,23 @@
     "input.look_lr": "Regarder gauche/droite",
     "input.shift_7": "Vitesse 7",
     "input.shift_8": "Vitesse 8",
-    "input.shift_9": "Vitesse 9"
+    "input.shift_9": "Vitesse 9",
+    "gui.config.category.general": "Général",
+    "gui.config.category.audio": "Audio",
+    "gui.config.category.vehicle_physics": "Physique des véhicules",
+    "gui.config.category.damage": "Dégâts",
+    "gui.config.mouse.left": "Souris gauche",
+    "gui.config.mouse.right": "Souris droite",
+    "gui.config.mouse.middle": "Souris du milieu",
+    "gui.config.mouse.numbered": "Souris %d",
+    "gui.config.setting.arcadeMode": "Vol arcade à la souris",
+    "gui.config.setting.dismountSafetySpeed": "Vitesse sûre pour descendre",
+    "gui.config.setting.vehicleStatusPanel": "Panneau d’état du véhicule",
+    "gui.config.aircraft_control.off": "Désactivé",
+    "gui.config.aircraft_control.classic": "Classique",
+    "gui.config.aircraft_control.arcade": "Arcade",
+    "gui.config.setting.aircraftControlMode": "Mode de contrôle des avions",
+    "gui.config.setting.aircraftControlMode.tooltip": "Choisit si les avions utilisent le clavier, le manche à la souris classique ou le vol arcade à la souris.",
+    "gui.config.setting.aimAssist": "Aide à la visée"
   }
 }

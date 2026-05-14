@@ -111,6 +111,9 @@ public final class ControlSystem {
 
     public static void setMouseYokeEnabled(boolean enabled, boolean displayMessage) {
         ConfigSystem.client.controlSettings.mouseYoke.value = enabled;
+        if (enabled) {
+            ConfigSystem.client.controlSettings.arcadeMode.value = false;
+        }
         ConfigSystem.saveToDisk();
         resetMouseYoke();
         mouseYokeEnabledLastCall = enabled;

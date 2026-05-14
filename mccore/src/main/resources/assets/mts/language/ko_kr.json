@@ -561,6 +561,23 @@
     "input.look_lr": "왼쪽/오른쪽 보기",
     "input.shift_7": "기어 7",
     "input.shift_8": "기어 8",
-    "input.shift_9": "기어 9"
+    "input.shift_9": "기어 9",
+    "gui.config.category.general": "일반",
+    "gui.config.category.audio": "오디오",
+    "gui.config.category.vehicle_physics": "차량 물리",
+    "gui.config.category.damage": "피해",
+    "gui.config.mouse.left": "왼쪽 마우스",
+    "gui.config.mouse.right": "오른쪽 마우스",
+    "gui.config.mouse.middle": "가운데 마우스",
+    "gui.config.mouse.numbered": "마우스 %d",
+    "gui.config.setting.arcadeMode": "마우스 아케이드 비행",
+    "gui.config.setting.dismountSafetySpeed": "안전 하차 속도",
+    "gui.config.setting.vehicleStatusPanel": "차량 상태 패널",
+    "gui.config.aircraft_control.off": "꺼짐",
+    "gui.config.aircraft_control.classic": "클래식",
+    "gui.config.aircraft_control.arcade": "아케이드",
+    "gui.config.setting.aircraftControlMode": "항공기 조종 모드",
+    "gui.config.setting.aircraftControlMode.tooltip": "항공기를 키보드 입력, 클래식 마우스 요크 또는 아케이드 마우스 비행으로 조종할지 선택합니다.",
+    "gui.config.setting.aimAssist": "조준 보조"
   }
 }
