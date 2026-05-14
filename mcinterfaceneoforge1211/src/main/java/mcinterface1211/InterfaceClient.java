@@ -49,7 +49,6 @@ import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.neoforge.fluids.FluidStack;
 import net.neoforged.fml.common.EventBusSubscriber;
-import net.minecraft.core.registries.BuiltInRegistries;
 
 @EventBusSubscriber(modid = InterfaceLoader.MODID, value = Dist.CLIENT)
 public class InterfaceClient implements IInterfaceClient {
@@ -160,6 +159,11 @@ public class InterfaceClient implements IInterfaceClient {
     @Override
     public boolean isGUIOpen() {
         return Minecraft.getInstance().screen != null;
+    }
+
+    @Override
+    public boolean isGUIHidden() {
+        return Minecraft.getInstance().options.hideGui;
     }
 
     public void displayOverlayMessage(String message) {

@@ -64,10 +64,12 @@ public class InterfaceEventsEntityRendering {
     private static final Point3D playerPositionHelper = new Point3D();
     private static final Point3D cameraAdjustedPosition = new Point3D();
     private static final RotationMatrix cameraAdjustedOrientation = new RotationMatrix();
+    private static final TransformationMatrix cameraAdjustments = new TransformationMatrix();
+    /**Saved camera world-space position and orientation for use by {@link InterfaceClient#projectToScreen}.
+     * These are captured BEFORE the in-place transpose/subtraction that the GL pipeline requires.**/
     public static boolean adjustedCamera;
     public static final Point3D projectionCameraPosition = new Point3D();
     public static final RotationMatrix projectionCameraOrientation = new RotationMatrix();
-    private static final TransformationMatrix cameraAdjustments = new TransformationMatrix();
     private static int lastScreenWidth;
     private static int lastScreenHeight;
     private static float lastRiderYawHead;
@@ -87,9 +89,11 @@ public class InterfaceEventsEntityRendering {
             cameraAdjustedOrientation.setToZero();
             adjustedCamera = false;
             if (CameraSystem.adjustCamera(player, cameraAdjustedPosition, cameraAdjustedOrientation, (float) event.getRenderPartialTicks())) {
+                //Save original camera position and orientation for screen projection before modifying them.
                 projectionCameraPosition.set(cameraAdjustedPosition);
                 projectionCameraOrientation.set(cameraAdjustedOrientation);
                 adjustedCamera = true;
+
                 //Set helper to the current camera position.
                 EntityPlayer mcPlayer = ((WrapperPlayer) player).player;
                 playerPosition.set(mcPlayer.posX, mcPlayer.posY, mcPlayer.posZ);
