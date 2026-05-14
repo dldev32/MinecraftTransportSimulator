@@ -312,6 +312,7 @@ public class GUIConfig extends AGUIBase {
         addClientRow("north360");
         addAircraftControlModeRow();
         addClientRow("aimAssist");
+        addClientRow("freecam_3P");
         addClientRow("classicJystk");
         addClientRow("DismountSafteySpeed");
 
