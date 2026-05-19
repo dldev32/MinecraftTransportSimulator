@@ -260,7 +260,7 @@
     "gui.config.joystick.axismode": "Режим оси: ",
     "gui.config.joystick.normal": "Обычный",
     "gui.config.joystick.invert": "Инвертированный",
-    "gui.config.rendering.label": "Режим рендеринга. Медленные режимы лучше совместимы с шейдерами и модами производительности, но снижают FPS.",
+    "gui.config.rendering.label": "Rendering mode: Slower modes have more compatibility with shaders and performance mods at the cost of FPS",
     "gui.config.rendering.mode0": "Сверхбыстрый",
     "gui.config.rendering.mode1": "Быстрый",
     "gui.config.rendering.mode2": "Медленный",
@@ -573,11 +573,12 @@
     "gui.config.setting.arcadeMode": "Аркадное управление мышью",
     "gui.config.setting.dismountSafetySpeed": "Безопасная скорость выхода",
     "gui.config.setting.vehicleStatusPanel": "Панель состояния транспорта",
-    "gui.config.aircraft_control.off": "Выкл",
+    "gui.config.aircraft_control.off": "Клавиатура",
     "gui.config.aircraft_control.classic": "Классический",
     "gui.config.aircraft_control.arcade": "Аркадный",
     "gui.config.setting.aircraftControlMode": "Режим управления самолетами",
     "gui.config.setting.aircraftControlMode.tooltip": "Выбирает управление самолетами: клавиатура, классический мышиный штурвал или аркадный MouseFlight.",
-    "gui.config.setting.aimAssist": "Прицел-помощник"
+    "gui.config.setting.aimAssist": "Прицел-помощник",
+    "gui.config.setting.propellerDamageFactor": "Множитель урона пропеллеров"
   }
 }

@@ -257,7 +257,7 @@
     "gui.config.joystick.axismode": "轴模式: ",
     "gui.config.joystick.normal": "正常",
     "gui.config.joystick.invert": "反转",
-    "gui.config.rendering.label": "渲染模式。较慢模式与光影和性能模组兼容性更高，但会降低 FPS。",
+    "gui.config.rendering.label": "Rendering mode: Slower modes have more compatibility with shaders and performance mods at the cost of FPS",
     "gui.config.rendering.mode0": "极速",
     "gui.config.rendering.mode1": "快速",
     "gui.config.rendering.mode2": "慢速",
@@ -553,11 +553,12 @@
     "gui.config.setting.arcadeMode": "鼠标街机飞行",
     "gui.config.setting.dismountSafetySpeed": "安全下车速度",
     "gui.config.setting.vehicleStatusPanel": "载具状态面板",
-    "gui.config.aircraft_control.off": "关闭",
+    "gui.config.aircraft_control.off": "键盘",
     "gui.config.aircraft_control.classic": "经典",
     "gui.config.aircraft_control.arcade": "街机",
     "gui.config.setting.aircraftControlMode": "飞机控制模式",
     "gui.config.setting.aircraftControlMode.tooltip": "选择飞机使用键盘输入、经典鼠标驾驶杆或街机鼠标飞行。",
-    "gui.config.setting.aimAssist": "瞄准辅助"
+    "gui.config.setting.aimAssist": "瞄准辅助",
+    "gui.config.setting.propellerDamageFactor": "螺旋桨伤害系数"
   }
 }

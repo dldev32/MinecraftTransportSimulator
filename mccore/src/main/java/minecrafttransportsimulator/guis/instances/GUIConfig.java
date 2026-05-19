@@ -31,35 +31,42 @@ import minecrafttransportsimulator.systems.LanguageSystem;
 import minecrafttransportsimulator.systems.LanguageSystem.LanguageEntry;
 
 public class GUIConfig extends AGUIBase {
-    private static final float GUI_SCALE = 1.0F / 1.2F;
-    private static final int CONFIG_GUI_WIDTH = scale(512);
-    private static final int CONFIG_GUI_HEIGHT = scale(376);
-    private static final int TAB_HEIGHT = scale(20);
-    private static final int TAB_GAP = scale(2);
-    private static final int TAB_WIDTH = (CONFIG_GUI_WIDTH - TAB_GAP * 3) / 4;
-    private static final int CONTENT_TOP = scale(32);
-    private static final int CONTENT_BOTTOM = CONFIG_GUI_HEIGHT - scale(14);
-    private static final int LEFT_NAV_X = scale(16);
-    private static final int LEFT_NAV_Y = scale(48);
-    private static final int LEFT_NAV_WIDTH = scale(96);
-    private static final int LEFT_NAV_BUTTON_HEIGHT = scale(18);
-    private static final int LEFT_NAV_SPACING = scale(23);
-    private static final int DIVIDER_X = scale(128);
-    private static final int LIST_X_WITH_NAV = scale(146);
-    private static final int LIST_X_FULL = scale(24);
-    private static final int LIST_WIDTH_WITH_NAV = scale(338);
-    private static final int LIST_WIDTH_FULL = scale(460);
-    private static final int ROW_HEIGHT = scale(18);
-    private static final int SETTING_ROWS_WITH_NAV = 17;
-    private static final int SETTING_ROWS_FULL = 17;
-    private static final int SCROLL_X = CONFIG_GUI_WIDTH - scale(18);
-    private static final int SCROLL_TRACK_WIDTH = scale(4);
-    private static final int SCROLL_THUMB_WIDTH = scale(8);
-    private static final int SCROLL_THUMB_MIN_HEIGHT = scale(18);
+    private static final float DEFAULT_GUI_SCALE = 1.0F / 1.2F;
+    private static final int BASE_CONFIG_GUI_WIDTH = 512;
+    private static final int BASE_CONFIG_GUI_HEIGHT = 376;
+    private static final int BASE_TAB_HEIGHT = 20;
+    private static final int BASE_TAB_GAP = 2;
+    private static final int FIT_MARGIN = 8;
     private static final double OUTLINE_THICKNESS = 0.5D;
 
-    private static int scale(int value) {
-        return Math.max(1, Math.round(value * GUI_SCALE));
+    private float guiScale = DEFAULT_GUI_SCALE;
+    private int CONFIG_GUI_WIDTH = scale(BASE_CONFIG_GUI_WIDTH);
+    private int CONFIG_GUI_HEIGHT = scale(BASE_CONFIG_GUI_HEIGHT);
+    private int TAB_HEIGHT = scale(BASE_TAB_HEIGHT);
+    private int TAB_GAP = scale(BASE_TAB_GAP);
+    private int TAB_WIDTH = (CONFIG_GUI_WIDTH - TAB_GAP * 3) / 4;
+    private int CONTENT_TOP = scale(32);
+    private int CONTENT_BOTTOM = CONFIG_GUI_HEIGHT - scale(14);
+    private int LEFT_NAV_X = scale(16);
+    private int LEFT_NAV_Y = scale(48);
+    private int LEFT_NAV_WIDTH = scale(96);
+    private int LEFT_NAV_BUTTON_HEIGHT = scale(18);
+    private int LEFT_NAV_SPACING = scale(23);
+    private int DIVIDER_X = scale(128);
+    private int LIST_X_WITH_NAV = scale(146);
+    private int LIST_X_FULL = scale(24);
+    private int LIST_WIDTH_WITH_NAV = scale(338);
+    private int LIST_WIDTH_FULL = scale(460);
+    private int ROW_HEIGHT = scale(18);
+    private int SETTING_ROWS_WITH_NAV = 17;
+    private int SETTING_ROWS_FULL = 17;
+    private int SCROLL_X = CONFIG_GUI_WIDTH - scale(18);
+    private int SCROLL_TRACK_WIDTH = scale(4);
+    private int SCROLL_THUMB_WIDTH = scale(8);
+    private int SCROLL_THUMB_MIN_HEIGHT = scale(18);
+
+    private int scale(int value) {
+        return Math.max(1, Math.round(value * guiScale));
     }
 
     private static final float PANEL_ALPHA = 0.60F;
@@ -143,6 +150,7 @@ public class GUIConfig extends AGUIBase {
     private int activeScrollRowsToRender;
     private boolean scrollbarDragging;
     private int scrollbarDragOffset;
+    private SettingRow activeSliderRow;
 
     private int selectedJoystickComponentCount;
     private String selectedJoystickName;
@@ -159,8 +167,19 @@ public class GUIConfig extends AGUIBase {
     }
 
     @Override
+    public void setupComponentsInit(int screenWidth, int screenHeight) {
+        updateScaledLayout(screenWidth, screenHeight);
+        this.screenWidth = screenWidth;
+        this.screenHeight = screenHeight;
+        this.guiLeft = (screenWidth - getWidth()) / 2;
+        this.guiTop = (screenHeight - getHeight() - TAB_HEIGHT - TAB_GAP) / 2 + TAB_HEIGHT + TAB_GAP;
+        setupComponents();
+    }
+
+    @Override
     public void setupComponents() {
         components.clear();
+        clearLayoutCollections();
         addComponent(mainPanel = new SolidRect(guiLeft, guiTop, CONFIG_GUI_WIDTH, CONFIG_GUI_HEIGHT, COLOR_PANEL, PANEL_ALPHA, 0.7F));
         addComponent(sideDivider = new SolidRect(guiLeft + DIVIDER_X, guiTop + CONTENT_TOP, 1, CONTENT_BOTTOM - CONTENT_TOP, COLOR_DIVIDER, 1.0F));
         addSettingRowBackgrounds();
@@ -173,8 +192,58 @@ public class GUIConfig extends AGUIBase {
         addComponent(noResultsLabel = new TextLabel(guiLeft + LIST_X_FULL, guiTop + CONTENT_TOP + 60, LIST_WIDTH_FULL, 14, LanguageSystem.GUI_CONFIG_NO_RESULTS.getCurrentValue(), COLOR_DIM_TEXT, TextAlignment.LEFT_ALIGNED, 1.0F));
     }
 
-    private void addSettingRowBackgrounds() {
+    private void updateScaledLayout(int screenWidth, int screenHeight) {
+        float widthScale = (screenWidth - FIT_MARGIN * 2) / (float) BASE_CONFIG_GUI_WIDTH;
+        float heightScale = (screenHeight - FIT_MARGIN * 2) / (float) (BASE_CONFIG_GUI_HEIGHT + BASE_TAB_HEIGHT + BASE_TAB_GAP);
+        guiScale = Math.max(0.05F, Math.min(DEFAULT_GUI_SCALE, Math.min(widthScale, heightScale)));
+        CONFIG_GUI_WIDTH = scale(BASE_CONFIG_GUI_WIDTH);
+        CONFIG_GUI_HEIGHT = scale(BASE_CONFIG_GUI_HEIGHT);
+        TAB_HEIGHT = scale(BASE_TAB_HEIGHT);
+        TAB_GAP = scale(BASE_TAB_GAP);
+        TAB_WIDTH = (CONFIG_GUI_WIDTH - TAB_GAP * 3) / 4;
+        CONTENT_TOP = scale(32);
+        CONTENT_BOTTOM = CONFIG_GUI_HEIGHT - scale(14);
+        LEFT_NAV_X = scale(16);
+        LEFT_NAV_Y = scale(48);
+        LEFT_NAV_WIDTH = scale(96);
+        LEFT_NAV_BUTTON_HEIGHT = scale(18);
+        LEFT_NAV_SPACING = scale(23);
+        DIVIDER_X = scale(128);
+        LIST_X_WITH_NAV = scale(146);
+        LIST_X_FULL = scale(24);
+        LIST_WIDTH_WITH_NAV = scale(338);
+        LIST_WIDTH_FULL = scale(460);
+        ROW_HEIGHT = scale(18);
+        SETTING_ROWS_WITH_NAV = 17;
+        SETTING_ROWS_FULL = 17;
+        SCROLL_X = CONFIG_GUI_WIDTH - scale(18);
+        SCROLL_TRACK_WIDTH = scale(4);
+        SCROLL_THUMB_WIDTH = scale(8);
+        SCROLL_THUMB_MIN_HEIGHT = scale(18);
+    }
+
+    private void clearLayoutCollections() {
+        pageButtons.clear();
+        commonButtons.clear();
+        controlsButtons.clear();
+        clientSettingRows.clear();
+        serverSettingRows.clear();
+        renderingSettingRows.clear();
+        developmentSettingRows.clear();
         settingRowBackgrounds.clear();
+        keyboardRows.clear();
+        joystickSelectionButtons.clear();
+        visibleJoystickNames.clear();
+        joystickComponentButtons.clear();
+        joystickAssignmentLabels.clear();
+        joystickStateBacks.clear();
+        joystickStateFills.clear();
+        visibleJoystickComponentIndexes.clear();
+        joystickDigitalAssignmentRows.clear();
+        joystickAnalogAssignmentRows.clear();
+    }
+
+    private void addSettingRowBackgrounds() {
         for (int i = 0; i < SETTING_ROWS_FULL; ++i) {
             SolidRect background = new SolidRect(guiLeft + LIST_X_FULL, guiTop + CONTENT_TOP, LIST_WIDTH_FULL, ROW_HEIGHT - 2, COLOR_ROW_ALT, 0.35F);
             background.visible = false;
@@ -211,6 +280,10 @@ public class GUIConfig extends AGUIBase {
             scrollbarDragging = true;
             scrollbarDragOffset = mouseY - (int) -pageScrollThumb.position.y;
             return true;
+        } else if ((activeSliderRow = getSliderRowAt(mouseX, mouseY)) != null) {
+            clearTextFocus();
+            activeSliderRow.updateSliderFromMouse(mouseX);
+            return true;
         } else {
             boolean clicked = super.onClick(mouseX, mouseY);
             return clicked || editingText;
@@ -220,6 +293,7 @@ public class GUIConfig extends AGUIBase {
     @Override
     public void onRelease() {
         scrollbarDragging = false;
+        activeSliderRow = null;
         super.onRelease();
     }
 
@@ -227,6 +301,9 @@ public class GUIConfig extends AGUIBase {
     public boolean onMouseDragged(int mouseX, int mouseY) {
         if (scrollbarDragging) {
             updateScrollFromMouse(mouseY);
+            return true;
+        } else if (activeSliderRow != null) {
+            activeSliderRow.updateSliderFromMouse(mouseX);
             return true;
         }
         return false;
@@ -312,7 +389,7 @@ public class GUIConfig extends AGUIBase {
         addClientRow("north360");
         addAircraftControlModeRow();
         addClientRow("aimAssist");
-        addClientRow("freecam_3P");
+        addRenderingClientRow("freecam_3P");
         addClientRow("classicJystk");
         addClientRow("DismountSafteySpeed");
 
@@ -339,6 +416,10 @@ public class GUIConfig extends AGUIBase {
         addConfigRow(clientSettingRows, ConfigSystem.client.controlSettings, "client.control", fieldName, false);
     }
 
+    private void addRenderingClientRow(String fieldName) {
+        addConfigRow(clientSettingRows, ConfigSystem.client.renderingSettings, "client.rendering", fieldName, false);
+    }
+
     @SuppressWarnings("unchecked")
     private void populateSettingRows(List<SettingRow> rows, Object configObject, String idPrefix, boolean includeRenderingMode) {
         for (Field field : configObject.getClass().getFields()) {
@@ -353,7 +434,7 @@ public class GUIConfig extends AGUIBase {
         try {
             Field field = configObject.getClass().getField(fieldName);
             JSONConfigEntry<?> entry = (JSONConfigEntry<?>) field.get(configObject);
-            if ("joystickDeadZone".equals(fieldName)) {
+            if ("joystickDeadZone".equals(fieldName) || includeRenderingMode && "freecam_3P".equals(fieldName)) {
                 return;
             } else if (entry.value instanceof Boolean) {
                 rows.add(new SettingRow(idPrefix + "." + fieldName, fieldName, (JSONConfigEntry<Boolean>) entry, getSettingLabel(fieldName), null, SettingType.BOOLEAN));
@@ -391,6 +472,7 @@ public class GUIConfig extends AGUIBase {
         addServerRow("server.damage.vehicleDestruction", "vehicleDestruction", ConfigSystem.settings.damage.vehicleDestruction, LanguageSystem.GUI_CONFIG_SETTING_VEHICLE_DESTRUCTION);
         addServerRow("server.damage.vehicleExplosions", "vehicleExplosions", ConfigSystem.settings.damage.vehicleExplosions, LanguageSystem.GUI_CONFIG_SETTING_VEHICLE_EXPLOSIONS);
         addServerRow("server.damage.wheelBreakage", "wheelBreakage", ConfigSystem.settings.damage.wheelBreakage, LanguageSystem.GUI_CONFIG_SETTING_WHEEL_BREAKAGE);
+        addServerRow("server.damage.propellerDamageFactor", "propellerDamageFactor", ConfigSystem.settings.damage.propellerDamageFactor, LanguageSystem.GUI_CONFIG_SETTING_PROPELLER_DAMAGE_FACTOR);
         addServerRow("server.damage.crashDamageFactor", "crashDamageFactor", ConfigSystem.settings.damage.crashDamageFactor, LanguageSystem.GUI_CONFIG_SETTING_CRASH_DAMAGE_FACTOR);
         addServerRow("server.damage.bulletDamageFactor", "bulletDamageFactor", ConfigSystem.settings.damage.bulletDamageFactor, LanguageSystem.GUI_CONFIG_SETTING_BULLET_DAMAGE_FACTOR);
         addServerRow("server.damage.wheelDamageFactor", "wheelDamageFactor", ConfigSystem.settings.damage.wheelDamageFactor, LanguageSystem.GUI_CONFIG_SETTING_WHEEL_DAMAGE_FACTOR);
@@ -932,6 +1014,26 @@ public class GUIConfig extends AGUIBase {
         }
     }
 
+    private SettingRow getSliderRowAt(int mouseX, int mouseY) {
+        SettingRow row = getSliderRowAt(clientSettingRows, mouseX, mouseY);
+        if (row == null) {
+            row = getSliderRowAt(serverSettingRows, mouseX, mouseY);
+        }
+        if (row == null) {
+            row = getSliderRowAt(renderingSettingRows, mouseX, mouseY);
+        }
+        return row == null ? getSliderRowAt(developmentSettingRows, mouseX, mouseY) : row;
+    }
+
+    private SettingRow getSliderRowAt(List<SettingRow> rows, int mouseX, int mouseY) {
+        for (SettingRow row : rows) {
+            if (row.isSliderMouseInBounds(mouseX, mouseY)) {
+                return row;
+            }
+        }
+        return null;
+    }
+
     private boolean isDevelopmentLocked() {
         return InterfaceManager.clientInterface != null && InterfaceManager.clientInterface.getClientPlayer() != null && !InterfaceManager.clientInterface.getClientPlayer().isOP();
     }
@@ -998,11 +1100,14 @@ public class GUIConfig extends AGUIBase {
     }
 
     private boolean canStep(double value, NumericMetadata metadata, int direction) {
-        return direction < 0 ? value > metadata.minimum : value < metadata.maximum;
+        return !metadata.bounded || (direction < 0 ? value > metadata.minimum : value < metadata.maximum);
     }
 
     private double stepNumber(double currentValue, NumericMetadata metadata, int direction) {
-        double newValue = currentValue < metadata.minimum || currentValue > metadata.maximum ? clamp(currentValue, metadata.minimum, metadata.maximum) : clamp(currentValue + metadata.step * direction, metadata.minimum, metadata.maximum);
+        double newValue = currentValue + metadata.step * direction;
+        if (metadata.bounded) {
+            newValue = currentValue < metadata.minimum || currentValue > metadata.maximum ? clamp(currentValue, metadata.minimum, metadata.maximum) : clamp(newValue, metadata.minimum, metadata.maximum);
+        }
         return roundForStep(newValue, metadata.step);
     }
 
@@ -1022,27 +1127,31 @@ public class GUIConfig extends AGUIBase {
         return formatted.endsWith(".") ? formatted.substring(0, formatted.length() - 1) : formatted;
     }
 
+    private String formatNumericValue(double value, NumericMetadata metadata) {
+        return metadata.percent ? Math.round(value * 100) + "%" : formatNumber(value);
+    }
+
     private NumericMetadata getNumericMetadata(String fieldName) {
         if ("soundVolume".equals(fieldName) || "radioVolume".equals(fieldName)) {
-            return new NumericMetadata(0.0D, 1.5D, 0.1D);
+            return new NumericMetadata(0.0D, 1.5D, 0.01D, true, true, true);
         } else if ("joystickDeadZone".equals(fieldName)) {
-            return new NumericMetadata(0.0D, 1.0D, 0.01D);
+            return new NumericMetadata(0.0D, 1.0D, 0.01D, true, false, false);
         } else if ("steeringControlRate".equals(fieldName) || "steeringReturnRate".equals(fieldName)) {
-            return new NumericMetadata(0.1D, 10.0D, 0.1D);
+            return new NumericMetadata(0.0D, 0.0D, 0.5D, false, false, false);
         } else if ("flightControlRate".equals(fieldName)) {
-            return new NumericMetadata(0.1D, 5.0D, 0.1D);
+            return new NumericMetadata(0.0D, 0.0D, 0.5D, false, false, false);
         } else if ("mouseYokeRate".equals(fieldName)) {
-            return new NumericMetadata(0.01D, 1.0D, 0.01D);
+            return new NumericMetadata(0.0D, 0.0D, 0.05D, false, false, false);
         } else if ("roadMaxLength".equals(fieldName)) {
-            return new NumericMetadata(1.0D, 128.0D, 1.0D);
+            return new NumericMetadata(0.0D, 0.0D, 8.0D, false, false, false);
         } else if ("seaLevel".equals(fieldName)) {
-            return new NumericMetadata(0.0D, 320.0D, 1.0D);
+            return new NumericMetadata(0.0D, 0.0D, 8.0D, false, false, false);
         } else if ("maxFlightHeight".equals(fieldName)) {
-            return new NumericMetadata(0.0D, 1024.0D, 10.0D);
+            return new NumericMetadata(0.0D, 0.0D, 50.0D, false, false, false);
         } else if (fieldName.endsWith("Factor")) {
-            return new NumericMetadata(0.0D, 10.0D, 0.1D);
+            return new NumericMetadata(0.0D, 0.0D, 0.5D, false, false, false);
         } else {
-            return new NumericMetadata(0.0D, 100.0D, 1.0D);
+            return new NumericMetadata(0.0D, 0.0D, 1.0D, false, false, false);
         }
     }
 
@@ -1125,7 +1234,7 @@ public class GUIConfig extends AGUIBase {
             GUIComponentButton button = (GUIComponentButton) component;
             component.textPosition.set(button.centeredText ? x + component.width / 2 : x, -y - (component.height - 8) / 2, component.textPosition.z);
         } else if (component instanceof GUIComponentTextBox) {
-            component.textPosition.set(x, -y, component.textPosition.z);
+            component.textPosition.set(component instanceof NumericValueBox ? x + component.width / 2F : x, -y, component.textPosition.z);
         } else if (component instanceof TextLabel) {
             TextLabel label = (TextLabel) component;
             component.textPosition.set(label.alignment == TextAlignment.CENTERED ? x + component.width / 2F : x, -y, component.textPosition.z);
@@ -1215,11 +1324,17 @@ public class GUIConfig extends AGUIBase {
         private final double minimum;
         private final double maximum;
         private final double step;
+        private final boolean bounded;
+        private final boolean slider;
+        private final boolean percent;
 
-        private NumericMetadata(double minimum, double maximum, double step) {
+        private NumericMetadata(double minimum, double maximum, double step, boolean bounded, boolean slider, boolean percent) {
             this.minimum = minimum;
             this.maximum = maximum;
             this.step = step;
+            this.bounded = bounded;
+            this.slider = slider;
+            this.percent = percent;
         }
     }
 
@@ -1237,6 +1352,8 @@ public class GUIConfig extends AGUIBase {
         private TextButton plusButton;
         private TextButton modeButton;
         private TextLabel valueLabel;
+        private GUIComponentTextBox valueInputBox;
+        private SliderBar sliderBar;
 
         private SettingRow(LanguageEntry headerLanguage) {
             this.id = "header." + headerLanguage.key;
@@ -1285,19 +1402,24 @@ public class GUIConfig extends AGUIBase {
                     }
                 });
             } else if (type == SettingType.NUMBER) {
-                addComponent(minusButton = new TextButton(0, 0, 16, 14, "<") {
-                    @Override
-                    public void onClicked(boolean leftSide) {
-                        stepNumeric(-1);
-                    }
-                });
-                addComponent(valueLabel = new TextLabel(0, 0, 55, 14, "", COLOR_TEXT, TextAlignment.CENTERED, 0.85F));
-                addComponent(plusButton = new TextButton(0, 0, 16, 14, ">") {
-                    @Override
-                    public void onClicked(boolean leftSide) {
-                        stepNumeric(1);
-                    }
-                });
+                if (metadata.slider) {
+                    addComponent(sliderBar = new SliderBar(0, 0, 72, 14, this));
+                    addComponent(valueLabel = new TextLabel(0, 0, 34, 14, "", COLOR_TEXT, TextAlignment.CENTERED, 0.85F));
+                } else {
+                    addComponent(minusButton = new TextButton(0, 0, 16, 14, "<") {
+                        @Override
+                        public void onClicked(boolean leftSide) {
+                            stepNumeric(-1);
+                        }
+                    });
+                    addComponent(valueInputBox = new NumericValueBox(this));
+                    addComponent(plusButton = new TextButton(0, 0, 16, 14, ">") {
+                        @Override
+                        public void onClicked(boolean leftSide) {
+                            stepNumeric(1);
+                        }
+                    });
+                }
             } else if (type == SettingType.MODE) {
                 addComponent(modeButton = new TextButton(0, 0, 112, 14, "") {
                     @Override
@@ -1353,6 +1475,10 @@ public class GUIConfig extends AGUIBase {
             if (minusButton != null) {
                 minusButton.visible = visible;
                 plusButton.visible = visible;
+                valueInputBox.visible = visible;
+            }
+            if (sliderBar != null) {
+                sliderBar.visible = visible;
                 valueLabel.visible = visible;
             }
             if (modeButton != null) {
@@ -1372,10 +1498,16 @@ public class GUIConfig extends AGUIBase {
                 setComponentBounds(toggleButton, controlRight - 68, y, 68, 14);
             }
             if (minusButton != null) {
-                int controlLeft = controlRight - 68;
-                setComponentBounds(minusButton, controlLeft, y, 16, 14);
-                setComponentBounds(valueLabel, controlLeft + 18, y, 32, 14);
-                setComponentBounds(plusButton, controlLeft + 52, y, 16, 14);
+                int controlWidth = 48;
+                int controlLeft = controlRight - 34 - controlWidth / 2;
+                setComponentBounds(minusButton, controlLeft, y, 10, 14);
+                setComponentBounds(valueInputBox, controlLeft + 10, y, 28, 14);
+                setComponentBounds(plusButton, controlLeft + 38, y, 10, 14);
+            }
+            if (sliderBar != null) {
+                int controlLeft = controlRight - 76;
+                setComponentBounds(sliderBar, controlLeft, y - 2, 42, 14);
+                setComponentBounds(valueLabel, controlLeft + 46, y, 30, 14);
             }
             if (modeButton != null) {
                 int modeWidth = type == SettingType.AIRCRAFT_CONTROL_MODE ? 86 : 68;
@@ -1396,13 +1528,21 @@ public class GUIConfig extends AGUIBase {
                 toggleButton.textColorOverride = changedSettings.contains(id) ? COLOR_CHANGED : COLOR_TEXT;
             }
             if (minusButton != null) {
-                double value = ((Number) entry.value).doubleValue();
-                valueLabel.text = formatNumber(value);
-                valueLabel.color = changedSettings.contains(id) ? COLOR_CHANGED : COLOR_TEXT;
+                double savedValue = ((Number) entry.value).doubleValue();
+                if (!valueInputBox.focused) {
+                    valueInputBox.setText(formatNumber(savedValue));
+                }
+                valueInputBox.fontColor = changedSettings.contains(id) ? COLOR_CHANGED : COLOR_TEXT;
+                double value = getNumericValueForStep();
                 minusButton.enabled = canStep(value, metadata, -1);
                 plusButton.enabled = canStep(value, metadata, 1);
                 minusButton.textColorOverride = changedSettings.contains(id) ? COLOR_CHANGED : COLOR_TEXT;
                 plusButton.textColorOverride = changedSettings.contains(id) ? COLOR_CHANGED : COLOR_TEXT;
+            }
+            if (sliderBar != null) {
+                double value = ((Number) entry.value).doubleValue();
+                valueLabel.text = formatNumericValue(value, metadata);
+                valueLabel.color = changedSettings.contains(id) ? COLOR_CHANGED : COLOR_TEXT;
             }
             if (modeButton != null) {
                 modeButton.text = type == SettingType.AIRCRAFT_CONTROL_MODE ? getAircraftControlModeText(getAircraftControlMode()) : getRenderingModeText(ConfigSystem.client.renderingSettings.renderingMode.value);
@@ -1439,9 +1579,46 @@ public class GUIConfig extends AGUIBase {
             ConfigSystem.saveToDisk();
         }
 
+        private boolean isSliderMouseInBounds(int mouseX, int mouseY) {
+            return sliderBar != null && sliderBar.visible && sliderBar.isMouseInBounds(mouseX, mouseY);
+        }
+
+        private void updateSliderFromMouse(int mouseX) {
+            double sliderRange = metadata.maximum - metadata.minimum;
+            double sliderPercent = clamp((mouseX - sliderBar.position.x) / sliderBar.width, 0.0D, 1.0D);
+            setNumericValue(roundForStep(metadata.minimum + sliderRange * sliderPercent, metadata.step));
+        }
+
+        private void setNumericValueFromText(String text) {
+            if (text.isEmpty() || "-".equals(text) || ".".equals(text) || "-.".equals(text)) {
+                return;
+            }
+            try {
+                setNumericValue(Double.parseDouble(text));
+            } catch (NumberFormatException e) {
+                //Ignore transient invalid edits.  Validation keeps these rare, but paste/input methods may vary.
+            }
+        }
+
+        private double getNumericValueForStep() {
+            if (valueInputBox != null && valueInputBox.focused) {
+                String text = valueInputBox.getText();
+                if (!text.isEmpty() && !"-".equals(text) && !".".equals(text) && !"-.".equals(text)) {
+                    try {
+                        return Double.parseDouble(text);
+                    } catch (NumberFormatException e) {
+                        //Fall back to saved config value below.
+                    }
+                }
+            }
+            return ((Number) entry.value).doubleValue();
+        }
+
         @SuppressWarnings("unchecked")
-        private void stepNumeric(int direction) {
-            double newValue = stepNumber(((Number) entry.value).doubleValue(), metadata, direction);
+        private void setNumericValue(double newValue) {
+            if (metadata.bounded) {
+                newValue = clamp(newValue, metadata.minimum, metadata.maximum);
+            }
             if (entry.value instanceof Float) {
                 ((JSONConfigEntry<Float>) entry).value = (float) newValue;
             } else if (entry.value instanceof Double) {
@@ -1451,6 +1628,83 @@ public class GUIConfig extends AGUIBase {
             }
             changedSettings.add(id);
             ConfigSystem.saveToDisk();
+        }
+
+        private void stepNumeric(int direction) {
+            double newValue = stepNumber(getNumericValueForStep(), metadata, direction);
+            setNumericValue(newValue);
+            if (valueInputBox != null) {
+                valueInputBox.setText(formatNumber(newValue));
+            }
+        }
+    }
+
+    private class NumericValueBox extends GUIComponentTextBox {
+        private final SettingRow row;
+
+        private NumericValueBox(SettingRow row) {
+            super(GUIConfig.this, 0, 0, 46, 14, "", COLOR_TEXT, 12, 0, 0, 0, 0);
+            this.row = row;
+        }
+
+        @Override
+        public boolean isTextValid(String newText) {
+            return newText.isEmpty() || newText.matches("-?\\d*(\\.\\d*)?");
+        }
+
+        @Override
+        public void handleTextChange() {
+        }
+
+        @Override
+        public void handleKeyTyped(char typedChar, int typedCode, TextBoxControlKey control) {
+            if (typedCode == 257 || typedCode == 335 || typedCode == 28 || typedCode == 156) {
+                row.setNumericValueFromText(getText());
+                setText(formatNumber(((Number) row.entry.value).doubleValue()));
+                focused = false;
+                editingText = false;
+            } else if (control == null && typedChar != 0 && !Character.isDigit(typedChar) && typedChar != '-' && typedChar != '.') {
+                return;
+            } else {
+                super.handleKeyTyped(typedChar, typedCode, control);
+            }
+        }
+
+        @Override
+        public void renderText(boolean renderTextLit, int worldLightValue) {
+            String displayedText = focused && AGUIBase.inClockPeriod(20, 10) ? text + "_" : text;
+            textPosition.x = position.x + width / 2F;
+            RenderText.drawText(displayedText, null, textPosition, fontColor, TextAlignment.CENTERED, 0.85F, false, 0, renderTextLit || ignoreGUILightingState, worldLightValue);
+        }
+    }
+
+    private class SliderBar extends AGUIComponent {
+        private final SettingRow row;
+        private final RenderableData trackRenderable;
+        private final RenderableData fillRenderable;
+        private final RenderableData thumbRenderable;
+
+        private SliderBar(int x, int y, int width, int height, SettingRow row) {
+            super(x, y, width, height);
+            this.row = row;
+            this.trackRenderable = createRectRenderable(COLOR_DIM_TEXT, 1.0F);
+            this.fillRenderable = createRectRenderable(COLOR_TEXT, 1.0F);
+            this.thumbRenderable = createRectRenderable(COLOR_SCROLL_THUMB, 1.0F);
+        }
+
+        @Override
+        public void render(AGUIBase gui, int mouseX, int mouseY, boolean renderBright, boolean renderLitTexture, boolean blendingEnabled, float partialTicks) {
+            double value = ((Number) row.entry.value).doubleValue();
+            double ratio = clamp((value - row.metadata.minimum) / (row.metadata.maximum - row.metadata.minimum), 0.0D, 1.0D);
+            int x = (int) position.x;
+            int y = (int) -position.y;
+            int thumbWidth = Math.max(3, scale(4));
+            int thumbHeight = Math.max(8, height - 3);
+            int thumbX = x + (int) Math.round(ratio * (width - thumbWidth));
+            int trackY = y + height / 2 - 2;
+            drawRect(trackRenderable, x, trackY, width, 2, COLOR_DIM_TEXT, 0.55F, getZOffset());
+            drawRect(fillRenderable, x, trackY, thumbX - x + thumbWidth / 2, 2, changedSettings.contains(row.id) ? COLOR_CHANGED : COLOR_TEXT, 0.85F, getZOffset() + 1);
+            drawRect(thumbRenderable, thumbX, y + (height - thumbHeight) / 2, thumbWidth, thumbHeight, COLOR_SCROLL_THUMB, isMouseInBounds(mouseX, mouseY) ? 1.0F : 0.85F, getZOffset() + 2);
         }
     }
 

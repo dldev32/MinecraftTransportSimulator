@@ -346,11 +346,11 @@ public class LanguageSystem {
     public static final LanguageEntry GUI_CONFIG_JOYSTICK_AXISMODE = new LanguageEntry("gui.config.joystick.axismode", "Axis mode: ");
     public static final LanguageEntry GUI_CONFIG_JOYSTICK_NORMAL = new LanguageEntry("gui.config.joystick.normal", "Normal");
     public static final LanguageEntry GUI_CONFIG_JOYSTICK_INVERT = new LanguageEntry("gui.config.joystick.invert", "Inverted");
-    public static final LanguageEntry GUI_CONFIG_RENDERING_LABEL = new LanguageEntry("gui.config.rendering.label", "Rendering mode. Slower modes have more compatibility with shaders and performance mods at the cost of FPS.");
+    public static final LanguageEntry GUI_CONFIG_RENDERING_LABEL = new LanguageEntry("gui.config.rendering.label", "Rendering mode: Slower modes have more compatibility with shaders and performance mods at the cost of FPS");
     public static final LanguageEntry GUI_CONFIG_RENDERING_MODE0 = new LanguageEntry("gui.config.rendering.mode0", "Superfast");
     public static final LanguageEntry GUI_CONFIG_RENDERING_MODE1 = new LanguageEntry("gui.config.rendering.mode1", "Fast");
     public static final LanguageEntry GUI_CONFIG_RENDERING_MODE2 = new LanguageEntry("gui.config.rendering.mode2", "Slow");
-    public static final LanguageEntry GUI_CONFIG_AIRCRAFT_CONTROL_OFF = new LanguageEntry("gui.config.aircraft_control.off", "Off");
+    public static final LanguageEntry GUI_CONFIG_AIRCRAFT_CONTROL_OFF = new LanguageEntry("gui.config.aircraft_control.off", "Keyboard");
     public static final LanguageEntry GUI_CONFIG_AIRCRAFT_CONTROL_CLASSIC = new LanguageEntry("gui.config.aircraft_control.classic", "Classic");
     public static final LanguageEntry GUI_CONFIG_AIRCRAFT_CONTROL_ARCADE = new LanguageEntry("gui.config.aircraft_control.arcade", "Arcade");
     public static final LanguageEntry GUI_CONFIG_MOUSE_LEFT = new LanguageEntry("gui.config.mouse.left", "Left mouse");
@@ -415,6 +415,7 @@ public class LanguageSystem {
     public static final LanguageEntry GUI_CONFIG_SETTING_VEHICLE_DESTRUCTION = new LanguageEntry("gui.config.setting.vehicleDestruction", "Vehicle destruction");
     public static final LanguageEntry GUI_CONFIG_SETTING_VEHICLE_EXPLOSIONS = new LanguageEntry("gui.config.setting.vehicleExplosions", "Vehicle explosions");
     public static final LanguageEntry GUI_CONFIG_SETTING_WHEEL_BREAKAGE = new LanguageEntry("gui.config.setting.wheelBreakage", "Wheel breakage");
+    public static final LanguageEntry GUI_CONFIG_SETTING_PROPELLER_DAMAGE_FACTOR = new LanguageEntry("gui.config.setting.propellerDamageFactor", "Propeller damage factor");
     public static final LanguageEntry GUI_CONFIG_SETTING_CRASH_DAMAGE_FACTOR = new LanguageEntry("gui.config.setting.crashDamageFactor", "Crash damage factor");
     public static final LanguageEntry GUI_CONFIG_SETTING_BULLET_DAMAGE_FACTOR = new LanguageEntry("gui.config.setting.bulletDamageFactor", "Bullet damage factor");
     public static final LanguageEntry GUI_CONFIG_SETTING_WHEEL_DAMAGE_FACTOR = new LanguageEntry("gui.config.setting.wheelDamageFactor", "Wheel damage factor");

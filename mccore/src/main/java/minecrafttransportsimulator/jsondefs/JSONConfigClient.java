@@ -28,6 +28,7 @@ public class JSONConfigClient {
 
         public JSONConfigEntry<Boolean> renderWindows = new JSONConfigEntry<>(true, "Should the glass on windows be rendered on vehicles?");
         public JSONConfigEntry<Boolean> innerWindows = new JSONConfigEntry<>(false, "Should the glass on windows be rendered on the inside of the vehicle?  Note: if renderWindows is false, this config has no effect.");
+        public JSONConfigEntry<Boolean> freecam_3P = new JSONConfigEntry<>(false, "If true, third-person camera rotation in vehicles is disconnected from vehicle rotation and uses only rider look rotation.");
 
         public JSONConfigEntry<Boolean> renderFlares = new JSONConfigEntry<>(true, "If false, flares on lights will not render.");
         public JSONConfigEntry<Boolean> renderBeams = new JSONConfigEntry<>(true, "If false, beams on lights will not render.");
@@ -38,7 +39,7 @@ public class JSONConfigClient {
         public JSONConfigEntry<Boolean> lightsTransp = new JSONConfigEntry<>(false, "If true, textures that light up will be rendered on the transperent pass.  This is required for some shaders to prevent lit textures without alpha channels from becoming invible, but it may break rendering on non-shader builds.");
         public JSONConfigEntry<Boolean> playerTweaks = new JSONConfigEntry<>(true, "If true, player hands will be modified when holding guns, and hands and legs will be modified when riding in vehicles.  Set this to false (and restart the game) if mods cause issues, like two-hand rendering or player model issues.  Automatically set to false if some mods are detected.");
 
-        public JSONConfigEntry<Integer> renderingMode = new JSONConfigEntry<>(0, "Internal rendering mode value, don't touch!");
+        public JSONConfigEntry<Integer> renderingMode = new JSONConfigEntry<>(0, "Rendering mode: Slower modes have more compatibility with shaders and performance mods at the cost of FPS.");
     }
 
     public static class JSONControlSettings {
@@ -56,7 +57,6 @@ public class JSONConfigClient {
         public JSONConfigEntry<Boolean> mouseYoke = new JSONConfigEntry<>(false, "If true, aircraft pitch and roll are controlled by an invisible on-screen mouse yoke.  Cursor center is neutral; window edges are full input.");
         public JSONConfigEntry<Boolean> arcadeMode = new JSONConfigEntry<>(false, "If true, arcade-style mouse flight will be enabled.  This allows the mouse cursor to control aircraft and helicopter steering systems.");
         public JSONConfigEntry<Boolean> aimAssist = new JSONConfigEntry<>(false, "If true, the assisted aiming crosshair will be enabled for active vehicle guns.");
-        public JSONConfigEntry<Boolean> freecam_3P = new JSONConfigEntry<>(false, "If true, third-person camera rotation in vehicles is disconnected from vehicle rotation and uses only rider look rotation.");
 
         public JSONConfigEntry<Boolean> classicJystk = new JSONConfigEntry<>(false, "If true, the classic controller code will be used.  Note: THIS CODE MAY CRASH MOBILE DEVICES!  Also note that switching will probably mess up your keybinds.  Only do this if you are having issues with a joystick or controller not being recognized.  After changing this setting, reboot the game to make it take effect.");
 

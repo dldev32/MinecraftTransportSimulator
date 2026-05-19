@@ -260,7 +260,7 @@
     "gui.config.joystick.axismode": "Modo de eje: ",
     "gui.config.joystick.normal": "Normal",
     "gui.config.joystick.invert": "Invertido",
-    "gui.config.rendering.label": "Modo de renderizado. Los modos más lentos son más compatibles con shaders y mods de rendimiento, pero cuestan FPS.",
+    "gui.config.rendering.label": "Rendering mode: Slower modes have more compatibility with shaders and performance mods at the cost of FPS",
     "gui.config.rendering.mode0": "Superrápido",
     "gui.config.rendering.mode1": "Rápido",
     "gui.config.rendering.mode2": "Lento",
@@ -573,11 +573,12 @@
     "gui.config.setting.arcadeMode": "Vuelo arcade con ratón",
     "gui.config.setting.dismountSafetySpeed": "Velocidad segura para desmontar",
     "gui.config.setting.vehicleStatusPanel": "Panel de estado del vehículo",
-    "gui.config.aircraft_control.off": "Desactivado",
+    "gui.config.aircraft_control.off": "Teclado",
     "gui.config.aircraft_control.classic": "Clásico",
     "gui.config.aircraft_control.arcade": "Arcade",
     "gui.config.setting.aircraftControlMode": "Modo de control de aviones",
     "gui.config.setting.aircraftControlMode.tooltip": "Elige si los aviones usan teclado, yugo clásico con ratón o vuelo arcade con ratón.",
-    "gui.config.setting.aimAssist": "Ayuda de mira"
+    "gui.config.setting.aimAssist": "Ayuda de mira",
+    "gui.config.setting.propellerDamageFactor": "Multiplicador de daño de hélice"
   }
 }

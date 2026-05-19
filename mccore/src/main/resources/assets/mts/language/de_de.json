@@ -255,7 +255,7 @@
     "gui.config.joystick.axismode": "Achsenmodus: ",
     "gui.config.joystick.normal": "Normal",
     "gui.config.joystick.invert": "Invertiert",
-    "gui.config.rendering.label": "Rendering-Modus. Langsamere Modi sind kompatibler mit Shadern und Leistungsmods, kosten aber FPS.",
+    "gui.config.rendering.label": "Rendering mode: Slower modes have more compatibility with shaders and performance mods at the cost of FPS",
     "gui.config.rendering.mode0": "Superschnell",
     "gui.config.rendering.mode1": "Schnell",
     "gui.config.rendering.mode2": "Langsam",
@@ -553,11 +553,12 @@
     "gui.config.setting.arcadeMode": "Arcade-Mausflug",
     "gui.config.setting.dismountSafetySpeed": "Sichere Ausstiegsgeschwindigkeit",
     "gui.config.setting.vehicleStatusPanel": "Fahrzeugstatusanzeige",
-    "gui.config.aircraft_control.off": "Aus",
+    "gui.config.aircraft_control.off": "Tastatur",
     "gui.config.aircraft_control.classic": "Klassisch",
     "gui.config.aircraft_control.arcade": "Arcade",
     "gui.config.setting.aircraftControlMode": "Flugzeugsteuerung",
     "gui.config.setting.aircraftControlMode.tooltip": "Legt fest, ob Flugzeuge Tastatureingaben, das klassische Maus-Steuerhorn oder Arcade-Mausflug verwenden.",
-    "gui.config.setting.aimAssist": "Zielhilfe"
+    "gui.config.setting.aimAssist": "Zielhilfe",
+    "gui.config.setting.propellerDamageFactor": "Propellerschadensfaktor"
   }
 }

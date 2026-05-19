@@ -260,7 +260,7 @@
     "gui.config.joystick.axismode": "축 모드: ",
     "gui.config.joystick.normal": "일반",
     "gui.config.joystick.invert": "반전",
-    "gui.config.rendering.label": "렌더링 모드. 느린 모드는 셰이더와 성능 모드와의 호환성이 높지만 FPS가 낮아집니다.",
+    "gui.config.rendering.label": "Rendering mode: Slower modes have more compatibility with shaders and performance mods at the cost of FPS",
     "gui.config.rendering.mode0": "초고속",
     "gui.config.rendering.mode1": "빠름",
     "gui.config.rendering.mode2": "느림",
@@ -573,11 +573,12 @@
     "gui.config.setting.arcadeMode": "마우스 아케이드 비행",
     "gui.config.setting.dismountSafetySpeed": "안전 하차 속도",
     "gui.config.setting.vehicleStatusPanel": "차량 상태 패널",
-    "gui.config.aircraft_control.off": "꺼짐",
+    "gui.config.aircraft_control.off": "키보드",
     "gui.config.aircraft_control.classic": "클래식",
     "gui.config.aircraft_control.arcade": "아케이드",
     "gui.config.setting.aircraftControlMode": "항공기 조종 모드",
     "gui.config.setting.aircraftControlMode.tooltip": "항공기를 키보드 입력, 클래식 마우스 요크 또는 아케이드 마우스 비행으로 조종할지 선택합니다.",
-    "gui.config.setting.aimAssist": "조준 보조"
+    "gui.config.setting.aimAssist": "조준 보조",
+    "gui.config.setting.propellerDamageFactor": "프로펠러 피해 계수"
   }
 }

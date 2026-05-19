@@ -480,7 +480,7 @@
     "gui.config.section.general": "一般",
     "gui.config.section.car": "車/ボート",
     "gui.config.section.aircraft": "航空機",
-    "gui.config.rendering.label": "レンダリングモード。遅いモードはシェーダーや性能系 mod との互換性が高くなりますが、FPS が下がります。",
+    "gui.config.rendering.label": "Rendering mode: Slower modes have more compatibility with shaders and performance mods at the cost of FPS",
     "gui.config.rendering.mode0": "超高速",
     "gui.config.rendering.mode1": "高速",
     "gui.config.rendering.mode2": "低速",
@@ -555,11 +555,12 @@
     "gui.config.setting.arcadeMode": "マウスアーケード飛行",
     "gui.config.setting.dismountSafetySpeed": "安全降車速度",
     "gui.config.setting.vehicleStatusPanel": "車両状態パネル",
-    "gui.config.aircraft_control.off": "オフ",
+    "gui.config.aircraft_control.off": "キーボード",
     "gui.config.aircraft_control.classic": "クラシック",
     "gui.config.aircraft_control.arcade": "アーケード",
     "gui.config.setting.aircraftControlMode": "航空機の操作モード",
     "gui.config.setting.aircraftControlMode.tooltip": "航空機をキーボード入力、クラシックなマウスヨーク、またはアーケードマウス飛行で操作するかを選択します。",
-    "gui.config.setting.aimAssist": "照準アシスト"
+    "gui.config.setting.aimAssist": "照準アシスト",
+    "gui.config.setting.propellerDamageFactor": "プロペラダメージ係数"
   }
 }
