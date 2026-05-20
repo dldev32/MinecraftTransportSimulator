@@ -24,6 +24,9 @@ import minecrafttransportsimulator.entities.instances.PartInteractable;
 import minecrafttransportsimulator.entities.instances.PartSeat;
 import minecrafttransportsimulator.guis.components.AGUIBase;
 import minecrafttransportsimulator.guis.components.GUIComponentCrosshair;
+import minecrafttransportsimulator.guis.components.GUIComponentDamageXRay;
+import minecrafttransportsimulator.guis.components.GUIComponentDamageXRayBullet;
+import minecrafttransportsimulator.guis.components.GUIComponentDamageXRayEntity;
 import minecrafttransportsimulator.guis.components.GUIComponentItem;
 import minecrafttransportsimulator.guis.components.GUIComponentLabel;
 import minecrafttransportsimulator.items.components.AItemPack;
@@ -43,6 +46,8 @@ import minecrafttransportsimulator.rendering.RenderText.TextAlignment;
 import minecrafttransportsimulator.sound.SoundInstance;
 import minecrafttransportsimulator.systems.CameraSystem;
 import minecrafttransportsimulator.systems.ConfigSystem;
+import minecrafttransportsimulator.systems.DamageXRaySystem;
+import minecrafttransportsimulator.systems.DamageXRaySystem.Analysis;
 
 /**
  * A GUI that is used to render overlay components.  These components are independent of
@@ -55,6 +60,9 @@ public class GUIOverlay extends AGUIBase {
     private GUIComponentLabel gunLabel;
     private GUIComponentItem scannerItem;
     private GUIComponentCrosshair aimingCrosshair;
+    private GUIComponentDamageXRay damageXRayWindow;
+    private GUIComponentDamageXRayEntity damageXRayEntity;
+    private GUIComponentDamageXRayBullet damageXRayBullet;
     private final List<String> tooltipText = new ArrayList<>();
     private EntityInteractResult lastInteractResult;
     private AEntityE_Interactable<?> lastCollisionGroupHoverEntity;
@@ -78,6 +86,12 @@ public class GUIOverlay extends AGUIBase {
         // Start crosshair at screen centre; setStates() repositions it every frame.
         addComponent(aimingCrosshair = new GUIComponentCrosshair(screenWidth / 2, screenHeight / 2));
         aimingCrosshair.visible = false;
+        addComponent(damageXRayEntity = new GUIComponentDamageXRayEntity(0, 0, 1, 1));
+        damageXRayEntity.visible = false;
+        addComponent(damageXRayWindow = new GUIComponentDamageXRay(0, 0, 1, 1));
+        damageXRayWindow.visible = false;
+        addComponent(damageXRayBullet = new GUIComponentDamageXRayBullet(0, 0));
+        damageXRayBullet.visible = false;
         addComponent(scannerItem = new GUIComponentItem(0, screenHeight / 4, 6.0F) {
             //Render the item stats as a tooltip, as it's easier to see.
             @Override
@@ -251,6 +265,8 @@ public class GUIOverlay extends AGUIBase {
                 }
             }
         }
+
+        updateDamageXRayOverlay();
     }
 
     @Override
@@ -345,6 +361,22 @@ public class GUIOverlay extends AGUIBase {
     @Override
     protected String getTexture() {
         return CameraSystem.customCameraOverlay;
+    }
+
+    private void updateDamageXRayOverlay() {
+        Analysis analysis = DamageXRaySystem.getActiveAnalysis();
+        damageXRayWindow.visible = analysis != null && !InterfaceManager.clientInterface.isGUIHidden();
+        damageXRayEntity.visible = damageXRayWindow.visible;
+        damageXRayBullet.visible = damageXRayWindow.visible;
+        if (damageXRayWindow.visible) {
+            int xrayWidth = Math.min(280, Math.max(180, screenWidth / 3));
+            int xrayHeight = Math.min(190, Math.max(135, screenHeight / 3));
+            int panelX = Math.max(4, screenWidth - xrayWidth - 8);
+            int panelY = 8;
+            damageXRayEntity.setPanelBounds(panelX, panelY, xrayWidth, xrayHeight);
+            damageXRayWindow.setPanelBounds(panelX, panelY, xrayWidth, xrayHeight);
+            damageXRayBullet.setPanelBounds(panelX, panelY, xrayWidth, xrayHeight);
+        }
     }
 
     /**

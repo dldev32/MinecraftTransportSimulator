@@ -7,6 +7,7 @@ import minecrafttransportsimulator.baseclasses.ColorRGB;
 import minecrafttransportsimulator.baseclasses.TransformationMatrix;
 import minecrafttransportsimulator.guis.components.GUIComponentCutout;
 import minecrafttransportsimulator.mcinterface.InterfaceManager;
+import minecrafttransportsimulator.systems.DamageXRaySystem;
 
 /**
  * Class designed to represent rendering data.  This contains {@link RenderableVertices},
@@ -132,7 +133,11 @@ public class RenderableData {
     }
 
     public void render() {
-        InterfaceManager.renderingInterface.renderVertices(this, changedSinceLastRender);
+        if (DamageXRaySystem.isRenderingXRayModel() && DamageXRaySystem.isPerspectiveProjectionActive() && !vertexObject.isLines) {
+            DamageXRaySystem.renderProjected(this);
+        } else {
+            InterfaceManager.renderingInterface.renderVertices(this, changedSinceLastRender);
+        }
         changedSinceLastRender = false;
     }
 

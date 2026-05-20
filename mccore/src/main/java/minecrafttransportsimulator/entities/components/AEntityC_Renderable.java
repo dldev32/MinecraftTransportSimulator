@@ -117,6 +117,16 @@ public abstract class AEntityC_Renderable extends AEntityB_Existing {
     }
 
     /**
+     * Renders this entity using a caller-provided transform.  This is used by GUI
+     * preview surfaces that need the live model without the world camera transform.
+     */
+    public final void renderModelWithTransform(TransformationMatrix transform, boolean blendingEnabled, float partialTicks) {
+        if (!disableRendering()) {
+            renderModel(transform, blendingEnabled, partialTicks);
+        }
+    }
+
+    /**
      * If rendering needs to be skipped for any reason, return true here.
      */
     protected boolean disableRendering() {

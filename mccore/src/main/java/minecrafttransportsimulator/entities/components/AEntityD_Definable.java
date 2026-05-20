@@ -55,6 +55,7 @@ import minecrafttransportsimulator.sound.SoundInstance;
 import minecrafttransportsimulator.systems.CameraSystem;
 import minecrafttransportsimulator.systems.CameraSystem.CameraMode;
 import minecrafttransportsimulator.systems.ConfigSystem;
+import minecrafttransportsimulator.systems.DamageXRaySystem;
 
 /**
  * Base class for entities that are defined via JSON definitions and can be modeled in 3D.
@@ -1383,6 +1384,11 @@ public abstract class AEntityD_Definable<JSONDefinition extends AJSONMultiModelP
 
         //Render model object individually.
         objectList.forEach(modelObject -> modelObject.render(this, transform, blendingEnabled, partialTicks));
+
+        if (DamageXRaySystem.isRenderingXRayModel()) {
+            world.endProfiling();
+            return;
+        }
 
         //Render any static text.
         world.beginProfiling("MainText", false);

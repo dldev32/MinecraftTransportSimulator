@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
+import minecrafttransportsimulator.baseclasses.ColorRGB;
 import minecrafttransportsimulator.baseclasses.RotationMatrix;
 import minecrafttransportsimulator.rendering.AModelParser;
 import minecrafttransportsimulator.rendering.RenderableData;
@@ -39,6 +40,9 @@ public class GUIComponent3DModel extends AGUIComponent {
 
     public boolean spin;
     public float scale = 1.0F;
+    public float alpha = 1.0F;
+    public ColorRGB renderColor = ColorRGB.WHITE;
+    public RotationMatrix rotationOverride;
     public String modelLocation;
     public String textureLocation;
 
@@ -60,7 +64,7 @@ public class GUIComponent3DModel extends AGUIComponent {
      */
     @Override
     public void render(AGUIBase gui, int mouseX, int mouseY, boolean renderBright, boolean renderLitTexture, boolean blendingEnabled, float partialTicks) {
-        if (!blendingEnabled && modelLocation != null) {
+        if (modelLocation != null) {
             if (!modelParsedObjects.containsKey(modelLocation)) {
                 List<RenderableVertices> parsedObjects = AModelParser.parseModel(modelLocation, false);
                 //Remove any windows and "commented" objects from the model.  We don't want to render those.
@@ -102,23 +106,31 @@ public class GUIComponent3DModel extends AGUIComponent {
                 RenderableData renderable = new RenderableData(new RenderableVertices("GUI_3D_MODEL", totalModel, true, AModelParser.isMissingModel(parsedObjects)), textureLocation);
                 modelParsedObjects.put(modelLocation, renderable);
             }
-            RenderableData renderable = modelParsedObjects.get(modelLocation);
+            RenderableData baseRenderable = modelParsedObjects.get(modelLocation);
+            if (!staticScaling) {
+                scale = modelScalingFactors.get(modelLocation);
+            }
+            double totalScale = scale * scaleFactor;
+            RenderableData renderable = baseRenderable;
+            renderable.setTexture(textureLocation);
+            renderable.setAlpha(alpha);
+            renderable.setColor(renderColor);
+            if (renderable.isTranslucent != blendingEnabled) {
+                return;
+            }
             renderable.transform.resetTransforms();
             renderable.transform.setTranslation(position);
-            if (isometric) {
+            if (rotationOverride != null) {
+                renderable.transform.applyRotation(rotationOverride);
+            } else if (isometric) {
                 renderable.transform.applyRotation(ISOMETRIC_ROTATION);
             }
             if (spin) {
                 renderable.transform.applyRotation(new RotationMatrix().setToAxisAngle(0, 1, 0, (36 * System.currentTimeMillis() / 1000) % 360));
             }
-            if (!staticScaling) {
-                scale = modelScalingFactors.get(modelLocation);
-            }
-            double totalScale = scale * scaleFactor;
             renderable.setLightValue(gui.worldLightValue);
             renderable.setLightMode(renderBright ? LightingMode.IGNORE_ALL_LIGHTING : LightingMode.IGNORE_ORIENTATION_LIGHTING);
             renderable.transform.applyScaling(totalScale, totalScale, totalScale);
-            renderable.setTexture(textureLocation);
             renderable.render();
         }
     }

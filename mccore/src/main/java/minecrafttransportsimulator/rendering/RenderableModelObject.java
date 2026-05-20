@@ -33,6 +33,7 @@ import minecrafttransportsimulator.mcinterface.InterfaceManager;
 import minecrafttransportsimulator.rendering.GIFParser.ParsedGIF;
 import minecrafttransportsimulator.rendering.RenderableData.LightingMode;
 import minecrafttransportsimulator.systems.ConfigSystem;
+import minecrafttransportsimulator.systems.DamageXRaySystem;
 
 /**
  * This class represents an object that can be rendered from a model.  This object is a set of
@@ -172,9 +173,13 @@ public class RenderableModelObject {
         //Do pre-render checks based on the object we are rendering.
         //This may block rendering if there are false visibility transforms or the wrong render pass.
         if (shouldRender(entity, blendingEnabled, partialTicks)) {
+            boolean renderingDamageXRay = DamageXRaySystem.isRenderingXRayModel();
+
             //If we are a online texture, bind that one rather than our own.
             //We do this first since we don't need to calculate other stuff if we aren't rendering.
-            if (isOnlineTexture) {
+            if (renderingDamageXRay) {
+                renderable.setTexture(DamageXRaySystem.XRAY_SOLID_TEXTURE);
+            } else if (isOnlineTexture) {
                 //Get the texture from the text objects of the entity.
                 //If we don't have anything set, we just use the existing texture.
                 for (Entry<JSONText, String> textEntry : entity.text.entrySet()) {
@@ -206,23 +211,28 @@ public class RenderableModelObject {
                         break;
                     }
                 }
-            } else if (!isWindow) {
+            } else if (isWindow) {
+                renderable.setTexture("mts:textures/rendering/glass.png");
+            } else {
                 //Set our standard texture, provided we're not a window.
                 //This allows the entity to dynamically change its texture.
                 renderable.setTexture(entity.getTexture());
             }
 
             //Now set dynamic alpha if we have it, since this dictates translucent state.
+            float renderAlpha = 1.0F;
             if (objectDef != null && objectDef.blendedAnimations && switchbox != null && switchbox.lastVisibilityClock != null) {
                 if (switchbox.lastVisibilityValue <= switchbox.lastVisibilityClock.animation.clampMin) {
-                    renderable.setAlpha(0);
+                    renderAlpha = 0;
                 } else if (switchbox.lastVisibilityValue >= switchbox.lastVisibilityClock.animation.clampMax) {
                     //Need >= here instead of above for things where min/max clamps are equal.
-                    renderable.setAlpha(1);
+                    renderAlpha = 1;
                 } else {
-                    renderable.setAlpha((float) ((switchbox.lastVisibilityValue - switchbox.lastVisibilityClock.animation.clampMin) / (switchbox.lastVisibilityClock.animation.clampMax - switchbox.lastVisibilityClock.animation.clampMin)));
+                    renderAlpha = (float) ((switchbox.lastVisibilityValue - switchbox.lastVisibilityClock.animation.clampMin) / (switchbox.lastVisibilityClock.animation.clampMax - switchbox.lastVisibilityClock.animation.clampMin));
                 }
             }
+            renderable.setAlpha(renderingDamageXRay ? renderAlpha * DamageXRaySystem.getActiveModelRenderAlpha() : renderAlpha);
+            renderable.setColor(renderingDamageXRay ? DamageXRaySystem.getActiveModelRenderColor() : ColorRGB.WHITE);
 
             //If we aren't on the right pass for our main object, and we don't have lights, skip further calcs.
             if (renderable.isTranslucent != blendingEnabled && lightDef == null) {
@@ -265,7 +275,11 @@ public class RenderableModelObject {
                 //Set object states and render.
                 boolean isLitTexture = lightDef != null && lightLevel > 0 && !lightDef.emissive && !lightDef.isBeam;
                 if ((renderable.isTranslucent && blendingEnabled) || ((isLitTexture && !renderable.isTranslucent) ? (ConfigSystem.client.renderingSettings.lightsTransp.value == blendingEnabled) : (renderable.isTranslucent == blendingEnabled))) {
-                    if (lightDef != null && lightDef.isBeam) {
+                    if (renderingDamageXRay) {
+                        renderable.setLightValue(entity.worldLightValue);
+                        renderable.setLightMode(LightingMode.IGNORE_ALL_LIGHTING);
+                        renderable.render();
+                    } else if (lightDef != null && lightDef.isBeam) {
                         //Model that's actually a beam, render it with beam lighting/blending. 
                         renderable.setLightValue(entity.worldLightValue);
                         renderable.setLightMode(ConfigSystem.client.renderingSettings.brightLights.value ? LightingMode.IGNORE_ALL_LIGHTING : LightingMode.NORMAL);
@@ -281,6 +295,8 @@ public class RenderableModelObject {
                         //Render interior window if we have one.
                         if (interiorWindowRenderable != null && ConfigSystem.client.renderingSettings.innerWindows.value) {
                             interiorWindowRenderable.setLightValue(renderable.worldLightValue);
+                            interiorWindowRenderable.setAlpha(renderable.alpha);
+                            interiorWindowRenderable.setColor(renderable.color);
                             interiorWindowRenderable.transform.set(renderable.transform);
                             interiorWindowRenderable.render();
                         }
@@ -289,7 +305,7 @@ public class RenderableModelObject {
             }
 
             //Check if we are a light that's not a beam.  If so, do light-specific rendering.
-            if (lightDef != null && !lightDef.isBeam) {
+            if (!renderingDamageXRay && lightDef != null && !lightDef.isBeam) {
                 ColorRGB color = entity.lightColorValues.get(lightDef);
                 if (colorRenderable != null && lightLevel > 0) {
                     //Color renderable might or might not be translucent depending on current alpha state.
@@ -338,12 +354,14 @@ public class RenderableModelObject {
             }
 
             //Render text on this object.  Only do this on the solid pass.
-            for (Entry<JSONText, String> textEntry : entity.text.entrySet()) {
-                JSONText textDef = textEntry.getKey();
-                if (renderable.vertexObject.name.equals(textDef.attachedTo)) {
-                    boolean isLitTexture = textDef.lightsUp && entity.renderTextLit();
-                    if (isLitTexture ? (ConfigSystem.client.renderingSettings.lightsTransp.value == blendingEnabled) : (renderable.isTranslucent == blendingEnabled)) {
-                        RenderText.draw3DText(textEntry.getValue(), entity, renderable.transform, textDef, false, isLitTexture);
+            if (!renderingDamageXRay) {
+                for (Entry<JSONText, String> textEntry : entity.text.entrySet()) {
+                    JSONText textDef = textEntry.getKey();
+                    if (renderable.vertexObject.name.equals(textDef.attachedTo)) {
+                        boolean isLitTexture = textDef.lightsUp && entity.renderTextLit();
+                        if (isLitTexture ? (ConfigSystem.client.renderingSettings.lightsTransp.value == blendingEnabled) : (renderable.isTranslucent == blendingEnabled)) {
+                            RenderText.draw3DText(textEntry.getValue(), entity, renderable.transform, textDef, false, isLitTexture);
+                        }
                     }
                 }
             }

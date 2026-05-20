@@ -43,11 +43,15 @@ import minecrafttransportsimulator.mcinterface.InterfaceManager;
 import minecrafttransportsimulator.packets.instances.PacketEntityBulletHitCollision;
 import minecrafttransportsimulator.packets.instances.PacketEntityBulletHitEntity;
 import minecrafttransportsimulator.packets.instances.PacketEntityBulletHitGeneric;
+import minecrafttransportsimulator.packets.instances.PacketEntityBulletHitXRay;
 import minecrafttransportsimulator.packets.instances.PacketPartChange_Add;
 import minecrafttransportsimulator.packets.instances.PacketPartChange_Remove;
 import minecrafttransportsimulator.packets.instances.PacketPlayerChatMessage;
 import minecrafttransportsimulator.packloading.LegacyCompatSystem;
 import minecrafttransportsimulator.packloading.PackParser;
+import minecrafttransportsimulator.systems.DamageXRaySystem;
+import minecrafttransportsimulator.systems.DamageXRaySystem.HitEvent;
+import minecrafttransportsimulator.systems.DamageXRaySystem.ResultType;
 import minecrafttransportsimulator.systems.LanguageSystem;
 
 /**
@@ -330,10 +334,17 @@ public abstract class AEntityF_Multipart<JSONDefinition extends AJSONPartProvide
      * call it on a single client in a group or on the server.  Calling it on every client will result in duplicate attacks.
      */
     public EntityBullet.HitType attackProjectile(Damage damage, EntityBullet bullet, Collection<BoundingBoxHitResult> hitBoxes) {
+        List<HitEvent> xrayEvents = bullet != null ? new ArrayList<>() : null;
+        Point3D xrayStartPosition = bullet != null ? bullet.position.copy() : null;
+        AEntityE_Interactable<?> xrayTargetEntity = null;
+
         //Check all boxes for armor and see if we penetrated them.
         for (BoundingBoxHitResult hitEntry : hitBoxes) {
             APart hitPart = getPartWithBox(hitEntry.box);
             AEntityF_Multipart<?> hitEntity = hitPart != null ? hitPart : this;
+            if (xrayTargetEntity == null) {
+                xrayTargetEntity = getXRayTargetEntity(hitEntity);
+            }
 
             //First check if we need to reduce health of the hitbox.
             boolean hitOperationalHitbox = false;
@@ -346,6 +357,7 @@ public abstract class AEntityF_Multipart<JSONDefinition extends AJSONPartProvide
                 //This is a server-only action that does NOT cause us to stop processing.
                 //Send off packet to damage the health hitbox (or damage directly on server) and continue as if we didn't hit anything.
                 double actualDamage = hitEntry.box.groupDef.damageMultiplier != 0 ? damage.amount * hitEntry.box.groupDef.damageMultiplier : damage.amount;
+                recordXRayEvent(xrayEvents, hitEntity, hitEntry, 0, 0, bullet != null ? bullet.armorPenetrated : 0, actualDamage, 0, false, false);
                 if (world.isClient()) {
                     InterfaceManager.packetInterface.sendToServer(new PacketEntityBulletHitCollision(hitEntity, hitEntry.box, actualDamage));
                 } else {
@@ -362,8 +374,10 @@ public abstract class AEntityF_Multipart<JSONDefinition extends AJSONPartProvide
                     double penetrationPotential = bullet.definition.bullet.isHeat ? bullet.definition.bullet.armorPenetration : (bullet.definition.bullet.armorPenetration * bullet.velocity / bullet.initialVelocity);
                     bullet.armorPenetrated += armorThickness;
                     bullet.displayDebugMessage("HIT ARMOR OF: " + (int) armorThickness);
+                    boolean armorStopped = bullet.armorPenetrated > penetrationPotential;
+                    recordXRayEvent(xrayEvents, hitEntity, hitEntry, armorThickness, penetrationPotential, bullet.armorPenetrated, 0, 0, armorStopped, false);
 
-                    if (bullet.armorPenetrated > penetrationPotential) {
+                    if (armorStopped) {
                         //Bullet hit too much armor.
                         if (world.isClient()) {
                             InterfaceManager.packetInterface.sendToServer(new PacketEntityBulletHitGeneric(bullet.gun, bullet.bulletNumber, hitEntry.position, hitEntry.side, HitType.ARMOR));
@@ -371,6 +385,7 @@ public abstract class AEntityF_Multipart<JSONDefinition extends AJSONPartProvide
                         } else {
                             EntityBullet.performGenericHitLogic(bullet.gun, bullet.bulletNumber, hitEntry.position, hitEntry.side, HitType.ARMOR);
                         }
+                        displayXRayAnalysis(xrayTargetEntity, bullet, xrayStartPosition, hitEntry.position, ResultType.ARMOR_STOP, xrayEvents);
                         bullet.displayDebugMessage("HIT TOO MUCH ARMOR.  MAX PEN: " + (int) penetrationPotential);
                         return EntityBullet.HitType.ARMOR;
                     }
@@ -399,6 +414,7 @@ public abstract class AEntityF_Multipart<JSONDefinition extends AJSONPartProvide
                         actualDamage *= hitEntry.box.groupDef.forwardsDamageMultiplier;
                     }
                     damage = new Damage(bullet.gun, hitEntry.box, actualDamage);
+                    recordXRayEvent(xrayEvents, hitEntity, hitEntry, 0, 0, bullet.armorPenetrated, 0, actualDamage, removeAfterDamage, hitForwardingHitbox);
 
                     bullet.displayDebugMessage("HIT ENTITY BOX FOR DAMAGE: " + (int) damage.amount + " DAMAGE WAS AT " + (int) hitEntity.damageVar.currentValue);
                     if (world.isClient()) {
@@ -406,12 +422,14 @@ public abstract class AEntityF_Multipart<JSONDefinition extends AJSONPartProvide
                         if (removeAfterDamage) {
                             InterfaceManager.packetInterface.sendToServer(new PacketEntityBulletHitGeneric(bullet.gun, bullet.bulletNumber, hitEntry.position, hitEntry.side, HitType.VEHICLE));
                             bullet.waitingOnActionPacket = true;
+                            displayXRayAnalysis(xrayTargetEntity, bullet, xrayStartPosition, hitEntry.position, ResultType.VEHICLE_STOP, xrayEvents);
                             return EntityBullet.HitType.VEHICLE;
                         }
                     } else {
                         EntityBullet.performEntityHitLogic(hitEntity, damage);
                         if (removeAfterDamage) {
                             EntityBullet.performGenericHitLogic(bullet.gun, bullet.bulletNumber, hitEntry.position, hitEntry.side, HitType.VEHICLE);
+                            displayXRayAnalysis(xrayTargetEntity, bullet, xrayStartPosition, hitEntry.position, ResultType.VEHICLE_STOP, xrayEvents);
                             return EntityBullet.HitType.VEHICLE;
                         }
                     }
@@ -423,7 +441,49 @@ public abstract class AEntityF_Multipart<JSONDefinition extends AJSONPartProvide
                 }
             }
         }
+        if (bullet != null && !xrayEvents.isEmpty()) {
+            displayXRayAnalysis(xrayTargetEntity, bullet, xrayStartPosition, bullet.position.copy().add(bullet.motion), ResultType.PENETRATED, xrayEvents);
+        }
         return null;
+    }
+
+    private void recordXRayEvent(List<HitEvent> xrayEvents, AEntityF_Multipart<?> hitEntity, BoundingBoxHitResult hitEntry, double armorThickness, double penetrationPotential, double armorPenetrated, double collisionDamage, double entityDamage, boolean stopped, boolean forwardedDamage) {
+        if (xrayEvents != null && xrayEvents.size() < DamageXRaySystem.MAX_EVENTS) {
+            int groupIndex = hitEntry.box.groupDef != null && hitEntity.definition.collisionGroups != null ? hitEntity.definition.collisionGroups.indexOf(hitEntry.box.groupDef) + 1 : 0;
+            int boxIndex = 0;
+            if (groupIndex > 0 && hitEntity.definitionCollisionBoxes.size() >= groupIndex) {
+                boxIndex = hitEntity.definitionCollisionBoxes.get(groupIndex - 1).indexOf(hitEntry.box) + 1;
+            }
+            xrayEvents.add(new HitEvent(hitEntry.position, groupIndex, boxIndex, getXRayEntityName(hitEntity), armorThickness, penetrationPotential, armorPenetrated, collisionDamage, entityDamage, stopped, forwardedDamage));
+        }
+    }
+
+    private void displayXRayAnalysis(AEntityE_Interactable<?> targetEntity, EntityBullet bullet, Point3D startPosition, Point3D endPosition, ResultType resultType, List<HitEvent> xrayEvents) {
+        if (targetEntity != null && bullet != null && xrayEvents != null && !xrayEvents.isEmpty()) {
+            String bulletName = bullet.gun.lastLoadedBullet != null ? bullet.gun.lastLoadedBullet.getItemName() : bullet.definition.systemName;
+            String targetName = getXRayEntityName(targetEntity);
+            String bulletModelLocation = bullet.definition.getModelLocation(bullet.subDefinition);
+            String bulletTextureLocation = bullet.getTexture();
+            Point3D displayStartPosition = startPosition.copy();
+            Point3D flightDirection = bullet.motion.copy().normalize();
+            if (flightDirection.length() > 0) {
+                double leadDistance = Math.max(targetEntity.encompassingBox.widthRadius, Math.max(targetEntity.encompassingBox.heightRadius, targetEntity.encompassingBox.depthRadius)) * 1.25D + 2.0D;
+                displayStartPosition.subtract(flightDirection.scale(leadDistance));
+            }
+            if (world.isClient()) {
+                DamageXRaySystem.displayAnalysis(targetEntity, bullet.gun.uniqueUUID, bullet.bulletNumber, bulletName, targetName, bulletModelLocation, bulletTextureLocation, displayStartPosition, endPosition, resultType, xrayEvents);
+            } else {
+                InterfaceManager.packetInterface.sendToAllClients(new PacketEntityBulletHitXRay(targetEntity, bullet.gun.uniqueUUID, bullet.bulletNumber, bulletName, targetName, bulletModelLocation, bulletTextureLocation, displayStartPosition, endPosition, resultType, xrayEvents));
+            }
+        }
+    }
+
+    private static AEntityE_Interactable<?> getXRayTargetEntity(AEntityF_Multipart<?> hitEntity) {
+        return hitEntity instanceof APart ? ((APart) hitEntity).masterEntity : hitEntity;
+    }
+
+    private static String getXRayEntityName(AEntityE_Interactable<?> entity) {
+        return entity.cachedItem != null ? entity.cachedItem.getItemName() : entity.definition.systemName;
     }
 
     @Override

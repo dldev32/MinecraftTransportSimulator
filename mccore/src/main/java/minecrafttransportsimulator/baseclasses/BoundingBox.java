@@ -14,6 +14,7 @@ import minecrafttransportsimulator.mcinterface.AWrapperWorld;
 import minecrafttransportsimulator.rendering.RenderableData;
 import minecrafttransportsimulator.rendering.RenderableData.LightingMode;
 import minecrafttransportsimulator.rendering.RenderableVertices;
+import minecrafttransportsimulator.systems.DamageXRaySystem;
 
 /**
  * Basic bounding box.  This class is mutable and allows for quick setting of values
@@ -336,11 +337,14 @@ public class BoundingBox {
             holographicRenderable = new RenderableData(new RenderableVertices(true), "mts:textures/rendering/holobox.png");
             holographicRenderable.setLightMode(LightingMode.IGNORE_ALL_LIGHTING);
         }
+        boolean renderingDamageXRay = DamageXRaySystem.isRenderingXRayModel();
+        holographicRenderable.setTexture(renderingDamageXRay ? DamageXRaySystem.XRAY_SOLID_TEXTURE : "mts:textures/rendering/holobox.png");
+        holographicRenderable.setAlpha(renderingDamageXRay ? DamageXRaySystem.getActiveModelRenderAlpha() : 1.0F);
         holographicRenderable.transform.set(transform);
         if (offset != null) {
             holographicRenderable.transform.applyTranslation(offset);
         }
-        holographicRenderable.setColor(color);
+        holographicRenderable.setColor(renderingDamageXRay ? DamageXRaySystem.getActiveModelRenderColor() : color);
         holographicRenderable.setBoxBounds(this, false);
         holographicRenderable.render();
     }

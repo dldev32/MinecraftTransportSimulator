@@ -17,6 +17,7 @@ import minecrafttransportsimulator.packets.instances.PacketEntityBulletHitCollis
 import minecrafttransportsimulator.packets.instances.PacketEntityBulletHitEntity;
 import minecrafttransportsimulator.packets.instances.PacketEntityBulletHitExternalEntity;
 import minecrafttransportsimulator.packets.instances.PacketEntityBulletHitGeneric;
+import minecrafttransportsimulator.packets.instances.PacketEntityBulletHitXRay;
 import minecrafttransportsimulator.packets.instances.PacketEntityCameraChange;
 import minecrafttransportsimulator.packets.instances.PacketEntityColorChange;
 import minecrafttransportsimulator.packets.instances.PacketEntityCustomKeypress;
@@ -247,6 +248,7 @@ public abstract class APacketBase {
         InterfaceManager.packetInterface.registerPacket(packetIndex++, PacketEntityBulletHitEntity.class);
         InterfaceManager.packetInterface.registerPacket(packetIndex++, PacketEntityBulletHitExternalEntity.class);
         InterfaceManager.packetInterface.registerPacket(packetIndex++, PacketEntityBulletHitBlock.class);
+        InterfaceManager.packetInterface.registerPacket(packetIndex++, PacketEntityBulletHitXRay.class);
 
         //Fluid tank packets.
         InterfaceManager.packetInterface.registerPacket(packetIndex++, PacketFluidTankChange.class);
