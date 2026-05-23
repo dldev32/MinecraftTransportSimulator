@@ -37,7 +37,10 @@ public class GUIConfig extends AGUIBase {
     private static final int BASE_TAB_HEIGHT = 20;
     private static final int BASE_TAB_GAP = 2;
     private static final int FIT_MARGIN = 8;
+    private static final float MAX_SCREEN_WIDTH_FILL = 0.46F;
+    private static final float MAX_SCREEN_HEIGHT_FILL = 0.65F;
     private static final double OUTLINE_THICKNESS = 0.5D;
+    private static final int DECORATION_Z_OFFSET = 20;
 
     private float guiScale = DEFAULT_GUI_SCALE;
     private int CONFIG_GUI_WIDTH = scale(BASE_CONFIG_GUI_WIDTH);
@@ -67,6 +70,22 @@ public class GUIConfig extends AGUIBase {
 
     private int scale(int value) {
         return Math.max(1, Math.round(value * guiScale));
+    }
+
+    private int localScale(int value) {
+        return Math.max(1, Math.round(value * guiScale / DEFAULT_GUI_SCALE));
+    }
+
+    private float textScale(float value) {
+        return value * guiScale / DEFAULT_GUI_SCALE;
+    }
+
+    private float centeredTextY(int y, int height) {
+        return -y - Math.max(0, height - localScale(8)) / 2F;
+    }
+
+    private float textButtonTextY(int y, int height) {
+        return -y - Math.max(0, height - localScale(12)) / 2F;
     }
 
     private static final float PANEL_ALPHA = 0.60F;
@@ -193,9 +212,11 @@ public class GUIConfig extends AGUIBase {
     }
 
     private void updateScaledLayout(int screenWidth, int screenHeight) {
-        float widthScale = (screenWidth - FIT_MARGIN * 2) / (float) BASE_CONFIG_GUI_WIDTH;
-        float heightScale = (screenHeight - FIT_MARGIN * 2) / (float) (BASE_CONFIG_GUI_HEIGHT + BASE_TAB_HEIGHT + BASE_TAB_GAP);
-        guiScale = Math.max(0.05F, Math.min(DEFAULT_GUI_SCALE, Math.min(widthScale, heightScale)));
+        float widthFillScale = screenWidth * MAX_SCREEN_WIDTH_FILL / BASE_CONFIG_GUI_WIDTH;
+        float heightFillScale = screenHeight * MAX_SCREEN_HEIGHT_FILL / (BASE_CONFIG_GUI_HEIGHT + BASE_TAB_HEIGHT + BASE_TAB_GAP);
+        float widthFitScale = (screenWidth - FIT_MARGIN * 2) / (float) BASE_CONFIG_GUI_WIDTH;
+        float heightFitScale = (screenHeight - FIT_MARGIN * 2) / (float) (BASE_CONFIG_GUI_HEIGHT + BASE_TAB_HEIGHT + BASE_TAB_GAP);
+        guiScale = Math.max(0.05F, Math.min(DEFAULT_GUI_SCALE, Math.min(Math.min(widthFillScale, heightFillScale), Math.min(widthFitScale, heightFitScale))));
         CONFIG_GUI_WIDTH = scale(BASE_CONFIG_GUI_WIDTH);
         CONFIG_GUI_HEIGHT = scale(BASE_CONFIG_GUI_HEIGHT);
         TAB_HEIGHT = scale(BASE_TAB_HEIGHT);
@@ -277,6 +298,7 @@ public class GUIConfig extends AGUIBase {
     @Override
     public boolean onClick(int mouseX, int mouseY) {
         if (pageScrollThumb.visible && pageScrollThumb.isMouseInBounds(mouseX, mouseY)) {
+            clearTextFocus();
             scrollbarDragging = true;
             scrollbarDragOffset = mouseY - (int) -pageScrollThumb.position.y;
             return true;
@@ -285,6 +307,7 @@ public class GUIConfig extends AGUIBase {
             activeSliderRow.updateSliderFromMouse(mouseX);
             return true;
         } else {
+            commitFocusedNumericTextBoxes(mouseX, mouseY);
             boolean clicked = super.onClick(mouseX, mouseY);
             return clicked || editingText;
         }
@@ -509,9 +532,10 @@ public class GUIConfig extends AGUIBase {
     }
 
     private void addJoystickComponents() {
-        addComponent(controlSelectionFaultLabel = new TextLabel(guiLeft + LIST_X_WITH_NAV, guiTop + CONTENT_TOP + 20, LIST_WIDTH_WITH_NAV, 80, "", COLOR_TEXT, TextAlignment.LEFT_ALIGNED, 0.8F));
-        addComponent(joystickHeaderLabel = new TextLabel(guiLeft + LIST_X_WITH_NAV, guiTop + CONTENT_TOP + 2, LIST_WIDTH_WITH_NAV, 14, "", COLOR_TEXT, TextAlignment.LEFT_ALIGNED, 0.85F));
-        addComponent(joystickBackButton = new TextButton(guiLeft + LIST_X_WITH_NAV, guiTop + CONTENT_TOP + 2, 56, 14, LanguageSystem.GUI_CONFIG_BACK.getCurrentValue()) {
+        int rowControlHeight = localScale(14);
+        addComponent(controlSelectionFaultLabel = new TextLabel(guiLeft + LIST_X_WITH_NAV, guiTop + CONTENT_TOP + localScale(20), LIST_WIDTH_WITH_NAV, localScale(80), "", COLOR_TEXT, TextAlignment.LEFT_ALIGNED, 0.8F));
+        addComponent(joystickHeaderLabel = new TextLabel(guiLeft + LIST_X_WITH_NAV, guiTop + CONTENT_TOP + localScale(2), LIST_WIDTH_WITH_NAV, rowControlHeight, "", COLOR_TEXT, TextAlignment.LEFT_ALIGNED, 0.85F));
+        addComponent(joystickBackButton = new TextButton(guiLeft + LIST_X_WITH_NAV, guiTop + CONTENT_TOP + localScale(2), localScale(56), rowControlHeight, LanguageSystem.GUI_CONFIG_BACK.getCurrentValue()) {
             @Override
             public void onClicked(boolean leftSide) {
                 selectedJoystickName = null;
@@ -522,26 +546,26 @@ public class GUIConfig extends AGUIBase {
                 calibrating = false;
             }
         });
-        addComponent(deadzoneDownButton = new TextButton(guiLeft + LIST_X_WITH_NAV + 70, guiTop + CONTENT_TOP + 2, 16, 14, "<") {
+        addComponent(deadzoneDownButton = new TextButton(guiLeft + LIST_X_WITH_NAV + localScale(70), guiTop + CONTENT_TOP + localScale(2), localScale(16), rowControlHeight, "<") {
             @Override
             public void onClicked(boolean leftSide) {
                 stepDeadzone(-1);
             }
         });
-        addComponent(deadzoneValueLabel = new TextLabel(guiLeft + LIST_X_WITH_NAV + 90, guiTop + CONTENT_TOP + 2, 160, 14, "", COLOR_TEXT, TextAlignment.CENTERED, 0.85F));
-        addComponent(deadzoneUpButton = new TextButton(guiLeft + LIST_X_WITH_NAV + 250, guiTop + CONTENT_TOP + 2, 16, 14, ">") {
+        addComponent(deadzoneValueLabel = new TextLabel(guiLeft + LIST_X_WITH_NAV + localScale(90), guiTop + CONTENT_TOP + localScale(2), localScale(160), rowControlHeight, "", COLOR_TEXT, TextAlignment.CENTERED, 0.85F));
+        addComponent(deadzoneUpButton = new TextButton(guiLeft + LIST_X_WITH_NAV + localScale(250), guiTop + CONTENT_TOP + localScale(2), localScale(16), rowControlHeight, ">") {
             @Override
             public void onClicked(boolean leftSide) {
                 stepDeadzone(1);
             }
         });
-        addComponent(joystickColumnIndexLabel = new TextLabel(guiLeft + LIST_X_WITH_NAV, guiTop + CONTENT_TOP + 28, 24, 14, "#", COLOR_DIM_TEXT, TextAlignment.LEFT_ALIGNED, 0.75F));
-        addComponent(joystickColumnNameLabel = new TextLabel(guiLeft + LIST_X_WITH_NAV + 28, guiTop + CONTENT_TOP + 28, 118, 14, LanguageSystem.GUI_CONFIG_JOYSTICK_NAME.getCurrentValue(), COLOR_DIM_TEXT, TextAlignment.LEFT_ALIGNED, 0.75F));
-        addComponent(joystickColumnStateLabel = new TextLabel(guiLeft + LIST_X_WITH_NAV + 150, guiTop + CONTENT_TOP + 28, 60, 14, LanguageSystem.GUI_CONFIG_JOYSTICK_STATE.getCurrentValue(), COLOR_DIM_TEXT, TextAlignment.LEFT_ALIGNED, 0.75F));
-        addComponent(joystickColumnAssignmentLabel = new TextLabel(guiLeft + LIST_X_WITH_NAV + 216, guiTop + CONTENT_TOP + 28, 120, 14, LanguageSystem.GUI_CONFIG_JOYSTICK_ASSIGNMENT.getCurrentValue(), COLOR_DIM_TEXT, TextAlignment.LEFT_ALIGNED, 0.75F));
+        addComponent(joystickColumnIndexLabel = new TextLabel(guiLeft + LIST_X_WITH_NAV, guiTop + CONTENT_TOP + localScale(28), localScale(24), rowControlHeight, "#", COLOR_DIM_TEXT, TextAlignment.LEFT_ALIGNED, 0.75F));
+        addComponent(joystickColumnNameLabel = new TextLabel(guiLeft + LIST_X_WITH_NAV + localScale(28), guiTop + CONTENT_TOP + localScale(28), localScale(118), rowControlHeight, LanguageSystem.GUI_CONFIG_JOYSTICK_NAME.getCurrentValue(), COLOR_DIM_TEXT, TextAlignment.LEFT_ALIGNED, 0.75F));
+        addComponent(joystickColumnStateLabel = new TextLabel(guiLeft + LIST_X_WITH_NAV + localScale(150), guiTop + CONTENT_TOP + localScale(28), localScale(60), rowControlHeight, LanguageSystem.GUI_CONFIG_JOYSTICK_STATE.getCurrentValue(), COLOR_DIM_TEXT, TextAlignment.LEFT_ALIGNED, 0.75F));
+        addComponent(joystickColumnAssignmentLabel = new TextLabel(guiLeft + LIST_X_WITH_NAV + localScale(216), guiTop + CONTENT_TOP + localScale(28), localScale(120), rowControlHeight, LanguageSystem.GUI_CONFIG_JOYSTICK_ASSIGNMENT.getCurrentValue(), COLOR_DIM_TEXT, TextAlignment.LEFT_ALIGNED, 0.75F));
 
         for (int i = 0; i < SETTING_ROWS_WITH_NAV; ++i) {
-            GUIComponentButton deviceButton = new TextButton(guiLeft + LIST_X_WITH_NAV, guiTop + CONTENT_TOP + 24 + ROW_HEIGHT * i, LIST_WIDTH_WITH_NAV - 24, 14, "") {
+            GUIComponentButton deviceButton = new TextButton(guiLeft + LIST_X_WITH_NAV, guiTop + CONTENT_TOP + localScale(24) + ROW_HEIGHT * i, LIST_WIDTH_WITH_NAV - localScale(24), rowControlHeight, "") {
                 @Override
                 public void onClicked(boolean leftSide) {
                     int index = joystickSelectionButtons.indexOf(this) + joystickSelectionScroll;
@@ -559,7 +583,7 @@ public class GUIConfig extends AGUIBase {
         }
 
         for (int i = 0; i < SETTING_ROWS_WITH_NAV - 2; ++i) {
-            GUIComponentButton componentButton = new TextButton(guiLeft + LIST_X_WITH_NAV, guiTop + CONTENT_TOP + 46 + ROW_HEIGHT * i, 140, 14, "") {
+            GUIComponentButton componentButton = new TextButton(guiLeft + LIST_X_WITH_NAV, guiTop + CONTENT_TOP + localScale(46) + ROW_HEIGHT * i, localScale(140), rowControlHeight, "") {
                 @Override
                 public void onClicked(boolean leftSide) {
                     int index = joystickComponentButtons.indexOf(this) + joystickComponentScroll;
@@ -572,25 +596,25 @@ public class GUIConfig extends AGUIBase {
             };
             joystickComponentButtons.add(componentButton);
             addComponent(componentButton);
-            SolidRect stateBack = new SolidRect(guiLeft + LIST_X_WITH_NAV + 150, guiTop + CONTENT_TOP + 48 + ROW_HEIGHT * i, 50, 8, COLOR_SCROLL_TRACK, 0.75F);
+            SolidRect stateBack = new SolidRect(guiLeft + LIST_X_WITH_NAV + localScale(150), guiTop + CONTENT_TOP + localScale(48) + ROW_HEIGHT * i, localScale(50), localScale(8), COLOR_SCROLL_TRACK, 0.75F);
             joystickStateBacks.add(stateBack);
             addComponent(stateBack);
-            SolidRect stateFill = new SolidRect(guiLeft + LIST_X_WITH_NAV + 175, guiTop + CONTENT_TOP + 48 + ROW_HEIGHT * i, 1, 8, COLOR_CHANGED, 0.9F);
+            SolidRect stateFill = new SolidRect(guiLeft + LIST_X_WITH_NAV + localScale(175), guiTop + CONTENT_TOP + localScale(48) + ROW_HEIGHT * i, localScale(1), localScale(8), COLOR_CHANGED, 0.9F);
             joystickStateFills.add(stateFill);
             addComponent(stateFill);
-            TextLabel assignmentLabel = new TextLabel(guiLeft + LIST_X_WITH_NAV + 216, guiTop + CONTENT_TOP + 45 + ROW_HEIGHT * i, 116, 14, "", COLOR_TEXT, TextAlignment.LEFT_ALIGNED, 0.75F);
+            TextLabel assignmentLabel = new TextLabel(guiLeft + LIST_X_WITH_NAV + localScale(216), guiTop + CONTENT_TOP + localScale(45) + ROW_HEIGHT * i, localScale(116), rowControlHeight, "", COLOR_TEXT, TextAlignment.LEFT_ALIGNED, 0.75F);
             joystickAssignmentLabels.add(assignmentLabel);
             addComponent(assignmentLabel);
         }
 
-        addComponent(joystickAssignmentPromptLabel = new TextLabel(guiLeft + LIST_X_WITH_NAV, guiTop + CONTENT_TOP + 2, LIST_WIDTH_WITH_NAV, 14, LanguageSystem.GUI_CONFIG_JOYSTICK_CHOOSEMAP.getCurrentValue(), COLOR_TEXT, TextAlignment.LEFT_ALIGNED, 0.85F));
-        addComponent(clearAssignmentButton = new FlatButton(guiLeft + LIST_X_WITH_NAV, guiTop + CONFIG_GUI_HEIGHT - 30, 120, 18, LanguageSystem.GUI_CONFIG_JOYSTICK_CLEAR.getCurrentValue()) {
+        addComponent(joystickAssignmentPromptLabel = new TextLabel(guiLeft + LIST_X_WITH_NAV, guiTop + CONTENT_TOP + localScale(2), LIST_WIDTH_WITH_NAV, rowControlHeight, LanguageSystem.GUI_CONFIG_JOYSTICK_CHOOSEMAP.getCurrentValue(), COLOR_TEXT, TextAlignment.LEFT_ALIGNED, 0.85F));
+        addComponent(clearAssignmentButton = new FlatButton(guiLeft + LIST_X_WITH_NAV, guiTop + CONFIG_GUI_HEIGHT - localScale(30), localScale(120), localScale(18), LanguageSystem.GUI_CONFIG_JOYSTICK_CLEAR.getCurrentValue()) {
             @Override
             public void onClicked(boolean leftSide) {
                 clearJoystickAssignment();
             }
         });
-        addComponent(cancelAssignmentButton = new FlatButton(guiLeft + CONFIG_GUI_WIDTH - 142, guiTop + CONFIG_GUI_HEIGHT - 30, 120, 18, LanguageSystem.GUI_CONFIG_JOYSTICK_CANCEL.getCurrentValue()) {
+        addComponent(cancelAssignmentButton = new FlatButton(guiLeft + CONFIG_GUI_WIDTH - localScale(142), guiTop + CONFIG_GUI_HEIGHT - localScale(30), localScale(120), localScale(18), LanguageSystem.GUI_CONFIG_JOYSTICK_CANCEL.getCurrentValue()) {
             @Override
             public void onClicked(boolean leftSide) {
                 joystickComponentId = -1;
@@ -600,7 +624,7 @@ public class GUIConfig extends AGUIBase {
         });
         addJoystickAssignmentRows();
 
-        addComponent(confirmBoundsButton = new FlatButton(guiLeft + LIST_X_WITH_NAV, guiTop + CONFIG_GUI_HEIGHT - 30, 120, 18, LanguageSystem.GUI_CONFIRM.getCurrentValue()) {
+        addComponent(confirmBoundsButton = new FlatButton(guiLeft + LIST_X_WITH_NAV, guiTop + CONFIG_GUI_HEIGHT - localScale(30), localScale(120), localScale(18), LanguageSystem.GUI_CONFIRM.getCurrentValue()) {
             @Override
             public void onClicked(boolean leftSide) {
                 boolean inverted = invertAxisButton.text.contains(LanguageSystem.GUI_CONFIG_JOYSTICK_INVERT.getCurrentValue());
@@ -611,18 +635,18 @@ public class GUIConfig extends AGUIBase {
                 joystickAssignmentScroll = 0;
             }
         });
-        addComponent(invertAxisButton = new FlatButton(guiLeft + LIST_X_WITH_NAV, guiTop + CONTENT_TOP + 104, 180, 18, LanguageSystem.GUI_CONFIG_JOYSTICK_AXISMODE.getCurrentValue() + LanguageSystem.GUI_CONFIG_JOYSTICK_NORMAL.getCurrentValue()) {
+        addComponent(invertAxisButton = new FlatButton(guiLeft + LIST_X_WITH_NAV, guiTop + CONTENT_TOP + localScale(104), localScale(180), localScale(18), LanguageSystem.GUI_CONFIG_JOYSTICK_AXISMODE.getCurrentValue() + LanguageSystem.GUI_CONFIG_JOYSTICK_NORMAL.getCurrentValue()) {
             @Override
             public void onClicked(boolean leftSide) {
                 text = LanguageSystem.GUI_CONFIG_JOYSTICK_AXISMODE.getCurrentValue() + (text.contains(LanguageSystem.GUI_CONFIG_JOYSTICK_INVERT.getCurrentValue()) ? LanguageSystem.GUI_CONFIG_JOYSTICK_NORMAL.getCurrentValue() : LanguageSystem.GUI_CONFIG_JOYSTICK_INVERT.getCurrentValue());
             }
         });
-        addComponent(axisMaxBoundsTextBox = new GUIComponentTextBox(this, guiLeft + LIST_X_WITH_NAV, guiTop + CONTENT_TOP + 52, 160, 14, "0.0", COLOR_TEXT, 16, 0, 0, 0, 0));
+        addComponent(axisMaxBoundsTextBox = new GUIComponentTextBox(this, guiLeft + LIST_X_WITH_NAV, guiTop + CONTENT_TOP + localScale(52), localScale(160), rowControlHeight, "0.0", COLOR_TEXT, 16, 0, 0, 0, 0));
         axisMaxBoundsTextBox.enabled = false;
-        addComponent(axisMinBoundsTextBox = new GUIComponentTextBox(this, guiLeft + LIST_X_WITH_NAV, guiTop + CONTENT_TOP + 78, 160, 14, "0.0", COLOR_TEXT, 16, 0, 0, 0, 0));
+        addComponent(axisMinBoundsTextBox = new GUIComponentTextBox(this, guiLeft + LIST_X_WITH_NAV, guiTop + CONTENT_TOP + localScale(78), localScale(160), rowControlHeight, "0.0", COLOR_TEXT, 16, 0, 0, 0, 0));
         axisMinBoundsTextBox.enabled = false;
-        addComponent(joystickCalibrationLabel1 = new TextLabel(guiLeft + LIST_X_WITH_NAV, guiTop + CONTENT_TOP + 18, LIST_WIDTH_WITH_NAV, 14, LanguageSystem.GUI_CONFIG_JOYSTICK_CALIBRATE1.getCurrentValue(), COLOR_TEXT, TextAlignment.LEFT_ALIGNED, 0.85F));
-        addComponent(joystickCalibrationLabel2 = new TextLabel(guiLeft + LIST_X_WITH_NAV, guiTop + CONTENT_TOP + 32, LIST_WIDTH_WITH_NAV, 14, LanguageSystem.GUI_CONFIG_JOYSTICK_CALIBRATE2.getCurrentValue(), COLOR_TEXT, TextAlignment.LEFT_ALIGNED, 0.85F));
+        addComponent(joystickCalibrationLabel1 = new TextLabel(guiLeft + LIST_X_WITH_NAV, guiTop + CONTENT_TOP + localScale(18), LIST_WIDTH_WITH_NAV, rowControlHeight, LanguageSystem.GUI_CONFIG_JOYSTICK_CALIBRATE1.getCurrentValue(), COLOR_TEXT, TextAlignment.LEFT_ALIGNED, 0.85F));
+        addComponent(joystickCalibrationLabel2 = new TextLabel(guiLeft + LIST_X_WITH_NAV, guiTop + CONTENT_TOP + localScale(32), LIST_WIDTH_WITH_NAV, rowControlHeight, LanguageSystem.GUI_CONFIG_JOYSTICK_CALIBRATE2.getCurrentValue(), COLOR_TEXT, TextAlignment.LEFT_ALIGNED, 0.85F));
     }
 
     private void addJoystickAssignmentRows() {
@@ -835,10 +859,10 @@ public class GUIConfig extends AGUIBase {
             button.visible = index < visibleJoystickNames.size();
             if (button.visible) {
                 button.text = visibleJoystickNames.get(index);
-                setComponentPosition(button, guiLeft + LIST_X_WITH_NAV, guiTop + CONTENT_TOP + 24 + ROW_HEIGHT * i);
+                setComponentPosition(button, guiLeft + LIST_X_WITH_NAV, guiTop + CONTENT_TOP + localScale(24) + ROW_HEIGHT * i);
             }
         }
-        updateScrollBar(joystickSelectionScroll, visibleJoystickNames.size(), SETTING_ROWS_WITH_NAV, CONTENT_TOP + 24, ROW_HEIGHT);
+        updateScrollBar(joystickSelectionScroll, visibleJoystickNames.size(), SETTING_ROWS_WITH_NAV, CONTENT_TOP + localScale(24), ROW_HEIGHT);
         noResultsLabel.visible = visibleJoystickNames.isEmpty();
     }
 
@@ -875,17 +899,17 @@ public class GUIConfig extends AGUIBase {
             assignment.visible = visible;
             if (visible) {
                 int componentIndex = visibleJoystickComponentIndexes.get(index);
-                int y = guiTop + CONTENT_TOP + 46 + ROW_HEIGHT * i;
+                int y = guiTop + CONTENT_TOP + localScale(46) + ROW_HEIGHT * i;
                 button.text = String.format(Locale.ROOT, "%02d  %s", componentIndex + 1, InterfaceManager.inputInterface.getJoystickComponentName(selectedJoystickName, componentIndex));
                 setComponentPosition(button, guiLeft + LIST_X_WITH_NAV, y);
-                setComponentPosition(back, guiLeft + LIST_X_WITH_NAV + 150, y + 3);
-                setComponentPosition(fill, guiLeft + LIST_X_WITH_NAV + 175, y + 3);
-                setComponentPosition(assignment, guiLeft + LIST_X_WITH_NAV + 216, y);
+                setComponentPosition(back, guiLeft + LIST_X_WITH_NAV + localScale(150), y + localScale(3));
+                setComponentPosition(fill, guiLeft + LIST_X_WITH_NAV + localScale(175), y + localScale(3));
+                setComponentPosition(assignment, guiLeft + LIST_X_WITH_NAV + localScale(216), y);
                 assignment.text = getJoystickComponentAssignment(componentIndex);
                 updateJoystickComponentState(componentIndex, back, fill);
             }
         }
-        updateScrollBar(joystickComponentScroll, visibleJoystickComponentIndexes.size(), rowsToRender, CONTENT_TOP + 46, ROW_HEIGHT);
+        updateScrollBar(joystickComponentScroll, visibleJoystickComponentIndexes.size(), rowsToRender, CONTENT_TOP + localScale(46), ROW_HEIGHT);
     }
 
     private void updateJoystickAssignmentPage(int wheelMovement) {
@@ -938,8 +962,9 @@ public class GUIConfig extends AGUIBase {
     private void updateRowBackground(int rowIndex, int sourceIndex, int x, int y, int width) {
         if (rowIndex < settingRowBackgrounds.size() && (sourceIndex % 2) == 0) {
             SolidRect background = settingRowBackgrounds.get(rowIndex);
+            int backgroundPadding = localScale(4);
             background.visible = true;
-            setComponentBounds(background, x - 4, y - 4, width + 8, ROW_HEIGHT);
+            setComponentBounds(background, x - backgroundPadding, y - backgroundPadding, width + backgroundPadding * 2, ROW_HEIGHT);
         }
     }
 
@@ -1009,7 +1034,22 @@ public class GUIConfig extends AGUIBase {
         editingText = false;
         for (AGUIComponent component : components) {
             if (component instanceof GUIComponentTextBox) {
-                ((GUIComponentTextBox) component).focused = false;
+                GUIComponentTextBox box = (GUIComponentTextBox) component;
+                if (box instanceof NumericValueBox && box.focused) {
+                    ((NumericValueBox) box).commitText();
+                }
+                box.focused = false;
+            }
+        }
+    }
+
+    private void commitFocusedNumericTextBoxes(int mouseX, int mouseY) {
+        for (AGUIComponent component : components) {
+            if (component instanceof NumericValueBox) {
+                NumericValueBox box = (NumericValueBox) component;
+                if (box.focused && !box.isMouseInBounds(mouseX, mouseY)) {
+                    box.commitText();
+                }
             }
         }
     }
@@ -1045,15 +1085,17 @@ public class GUIConfig extends AGUIBase {
     private void updateJoystickComponentState(int componentIndex, SolidRect back, SolidRect fill) {
         float pollData = InterfaceManager.inputInterface.getJoystickAxisValue(selectedJoystickName, componentIndex);
         if (InterfaceManager.inputInterface.isJoystickComponentAxis(selectedJoystickName, componentIndex)) {
-            int width = (int) (pollData * 25);
+            int centerOffset = localScale(25);
+            int barHeight = localScale(8);
+            int width = (int) (pollData * centerOffset);
             if (width >= 0) {
-                setComponentBounds(fill, (int) back.position.x + 25, (int) -back.position.y, width, 8);
+                setComponentBounds(fill, (int) back.position.x + centerOffset, (int) -back.position.y, width, barHeight);
             } else {
-                setComponentBounds(fill, (int) back.position.x + 25 + width, (int) -back.position.y, -width, 8);
+                setComponentBounds(fill, (int) back.position.x + centerOffset + width, (int) -back.position.y, -width, barHeight);
             }
             fill.color.setTo(COLOR_CHANGED);
         } else {
-            setComponentBounds(fill, (int) back.position.x + 20, (int) -back.position.y, 10, 8);
+            setComponentBounds(fill, (int) back.position.x + localScale(20), (int) -back.position.y, localScale(10), localScale(8));
             fill.color.setTo(pollData == 0 ? COLOR_DIM_TEXT : COLOR_CHANGED);
         }
     }
@@ -1141,7 +1183,9 @@ public class GUIConfig extends AGUIBase {
         } else if ("flightControlRate".equals(fieldName)) {
             return new NumericMetadata(0.0D, 0.0D, 0.5D, false, false, false);
         } else if ("mouseYokeRate".equals(fieldName)) {
-            return new NumericMetadata(0.0D, 0.0D, 0.05D, false, false, false);
+            return new NumericMetadata(0.0D, 0.0D, 0.5D, false, false, false);
+        } else if ("DismountSafteySpeed".equals(fieldName)) {
+            return new NumericMetadata(0.0D, 0.0D, 0.5D, false, false, false);
         } else if ("roadMaxLength".equals(fieldName)) {
             return new NumericMetadata(0.0D, 0.0D, 8.0D, false, false, false);
         } else if ("seaLevel".equals(fieldName)) {
@@ -1229,12 +1273,12 @@ public class GUIConfig extends AGUIBase {
         component.position.x = x;
         component.position.y = -y;
         if (component instanceof TextButton) {
-            component.textPosition.set(x + component.width / 2F, -y, component.textPosition.z);
+            component.textPosition.set(x + component.width / 2F, textButtonTextY(y, component.height), component.textPosition.z);
         } else if (component instanceof GUIComponentButton) {
             GUIComponentButton button = (GUIComponentButton) component;
-            component.textPosition.set(button.centeredText ? x + component.width / 2 : x, -y - (component.height - 8) / 2, component.textPosition.z);
+            component.textPosition.set(button.centeredText ? x + component.width / 2 : x, centeredTextY(y, component.height), component.textPosition.z);
         } else if (component instanceof GUIComponentTextBox) {
-            component.textPosition.set(component instanceof NumericValueBox ? x + component.width / 2F : x, -y, component.textPosition.z);
+            component.textPosition.set(component instanceof NumericValueBox ? x + component.width / 2F : x, centeredTextY(y, component.height), component.textPosition.z);
         } else if (component instanceof TextLabel) {
             TextLabel label = (TextLabel) component;
             component.textPosition.set(label.alignment == TextAlignment.CENTERED ? x + component.width / 2F : x, -y, component.textPosition.z);
@@ -1488,31 +1532,38 @@ public class GUIConfig extends AGUIBase {
 
         private void setPosition(int x, int y, int width) {
             if (header) {
-                setComponentBounds(label, x, y, width, 16);
+                setComponentBounds(label, x, y, width, localScale(16));
                 return;
             }
-            int controlRight = x + width - 8;
-            int labelWidth = Math.max(80, width - 145);
-            setComponentBounds(label, x, y, labelWidth, 14);
+            int rowControlHeight = localScale(14);
+            int controlRight = x + width - localScale(8);
+            int labelWidth = Math.max(localScale(80), width - localScale(145));
+            setComponentBounds(label, x, y, labelWidth, rowControlHeight);
             if (toggleButton != null) {
-                setComponentBounds(toggleButton, controlRight - 68, y, 68, 14);
+                int toggleWidth = localScale(68);
+                setComponentBounds(toggleButton, controlRight - toggleWidth, y, toggleWidth, rowControlHeight);
             }
             if (minusButton != null) {
-                int controlWidth = 48;
-                int controlLeft = controlRight - 34 - controlWidth / 2;
-                setComponentBounds(minusButton, controlLeft, y, 10, 14);
-                setComponentBounds(valueInputBox, controlLeft + 10, y, 28, 14);
-                setComponentBounds(plusButton, controlLeft + 38, y, 10, 14);
+                int controlWidth = localScale(48);
+                int buttonWidth = localScale(10);
+                int valueWidth = localScale(28);
+                int controlLeft = controlRight - localScale(34) - controlWidth / 2;
+                setComponentBounds(minusButton, controlLeft, y, buttonWidth, rowControlHeight);
+                setComponentBounds(valueInputBox, controlLeft + buttonWidth, y, valueWidth, rowControlHeight);
+                valueInputBox.textPosition.y = textButtonTextY(y, rowControlHeight);
+                setComponentBounds(plusButton, controlLeft + buttonWidth + valueWidth, y, buttonWidth, rowControlHeight);
             }
             if (sliderBar != null) {
-                int controlLeft = controlRight - 76;
-                setComponentBounds(sliderBar, controlLeft, y - 2, 42, 14);
-                setComponentBounds(valueLabel, controlLeft + 46, y, 30, 14);
+                int controlLeft = controlRight - localScale(76);
+                int sliderWidth = localScale(42);
+                setComponentBounds(sliderBar, controlLeft, y - localScale(2), sliderWidth, rowControlHeight);
+                setComponentBounds(valueLabel, controlLeft + localScale(46), y, localScale(30), rowControlHeight);
+                valueLabel.textPosition.y = textButtonTextY(y, rowControlHeight);
             }
             if (modeButton != null) {
-                int modeWidth = type == SettingType.AIRCRAFT_CONTROL_MODE ? 86 : 68;
-                int modeCenterOffset = type == SettingType.AIRCRAFT_CONTROL_MODE ? (modeWidth - 68) / 2 : 0;
-                setComponentBounds(modeButton, controlRight - modeWidth + modeCenterOffset, y, modeWidth, 14);
+                int modeWidth = type == SettingType.AIRCRAFT_CONTROL_MODE ? localScale(86) : localScale(68);
+                int modeCenterOffset = type == SettingType.AIRCRAFT_CONTROL_MODE ? (modeWidth - localScale(68)) / 2 : 0;
+                setComponentBounds(modeButton, controlRight - modeWidth + modeCenterOffset, y, modeWidth, rowControlHeight);
             }
         }
 
@@ -1659,10 +1710,7 @@ public class GUIConfig extends AGUIBase {
         @Override
         public void handleKeyTyped(char typedChar, int typedCode, TextBoxControlKey control) {
             if (typedCode == 257 || typedCode == 335 || typedCode == 28 || typedCode == 156) {
-                row.setNumericValueFromText(getText());
-                setText(formatNumber(((Number) row.entry.value).doubleValue()));
-                focused = false;
-                editingText = false;
+                commitText();
             } else if (control == null && typedChar != 0 && !Character.isDigit(typedChar) && typedChar != '-' && typedChar != '.') {
                 return;
             } else {
@@ -1670,11 +1718,18 @@ public class GUIConfig extends AGUIBase {
             }
         }
 
+        private void commitText() {
+            row.setNumericValueFromText(getText());
+            setText(formatNumber(((Number) row.entry.value).doubleValue()));
+            focused = false;
+            editingText = false;
+        }
+
         @Override
         public void renderText(boolean renderTextLit, int worldLightValue) {
             String displayedText = focused && AGUIBase.inClockPeriod(20, 10) ? text + "_" : text;
             textPosition.x = position.x + width / 2F;
-            RenderText.drawText(displayedText, null, textPosition, fontColor, TextAlignment.CENTERED, 0.85F, false, 0, renderTextLit || ignoreGUILightingState, worldLightValue);
+            RenderText.drawText(displayedText, null, textPosition, fontColor, TextAlignment.CENTERED, textScale(0.85F), false, 0, renderTextLit || ignoreGUILightingState, worldLightValue);
         }
     }
 
@@ -1698,13 +1753,14 @@ public class GUIConfig extends AGUIBase {
             double ratio = clamp((value - row.metadata.minimum) / (row.metadata.maximum - row.metadata.minimum), 0.0D, 1.0D);
             int x = (int) position.x;
             int y = (int) -position.y;
-            int thumbWidth = Math.max(3, scale(4));
-            int thumbHeight = Math.max(8, height - 3);
+            int trackHeight = localScale(2);
+            int thumbWidth = Math.max(localScale(3), localScale(4));
+            int thumbHeight = Math.max(localScale(8), height - localScale(3));
             int thumbX = x + (int) Math.round(ratio * (width - thumbWidth));
-            int trackY = y + height / 2 - 2;
-            drawRect(trackRenderable, x, trackY, width, 2, COLOR_DIM_TEXT, 0.55F, getZOffset());
-            drawRect(fillRenderable, x, trackY, thumbX - x + thumbWidth / 2, 2, changedSettings.contains(row.id) ? COLOR_CHANGED : COLOR_TEXT, 0.85F, getZOffset() + 1);
-            drawRect(thumbRenderable, thumbX, y + (height - thumbHeight) / 2, thumbWidth, thumbHeight, COLOR_SCROLL_THUMB, isMouseInBounds(mouseX, mouseY) ? 1.0F : 0.85F, getZOffset() + 2);
+            int trackY = y + height / 2 - trackHeight;
+            drawRect(trackRenderable, x, trackY, width, trackHeight, COLOR_DIM_TEXT, 0.55F, getZOffset(), blendingEnabled);
+            drawRect(fillRenderable, x, trackY, thumbX - x + thumbWidth / 2, trackHeight, changedSettings.contains(row.id) ? COLOR_CHANGED : COLOR_TEXT, 0.85F, getZOffset() + 1, blendingEnabled);
+            drawRect(thumbRenderable, thumbX, y + (height - thumbHeight) / 2, thumbWidth, thumbHeight, COLOR_SCROLL_THUMB, isMouseInBounds(mouseX, mouseY) ? 1.0F : 0.85F, getZOffset() + 2, blendingEnabled);
         }
     }
 
@@ -1731,7 +1787,7 @@ public class GUIConfig extends AGUIBase {
 
         @Override
         protected void setPosition(int x, int y, int width) {
-            setComponentBounds(label, x, y, width, 16);
+            setComponentBounds(label, x, y, width, localScale(16));
         }
 
         @Override
@@ -1759,8 +1815,9 @@ public class GUIConfig extends AGUIBase {
 
         @Override
         protected void setPosition(int x, int y, int width) {
-            setComponentBounds(label, x, y, width - 115, 14);
-            setComponentBounds(box, x + width - 104, y, 100, 14);
+            int boxWidth = localScale(100);
+            setComponentBounds(label, x, y, width - localScale(115), localScale(14));
+            setComponentBounds(box, x + width - boxWidth - localScale(4), y, boxWidth, localScale(14));
         }
 
         @Override
@@ -1793,8 +1850,9 @@ public class GUIConfig extends AGUIBase {
 
         @Override
         protected void setPosition(int x, int y, int width) {
-            setComponentBounds(label, x, y, width - 115, 14);
-            setComponentBounds(value, x + width - 104, y, 100, 14);
+            int valueWidth = localScale(100);
+            setComponentBounds(label, x, y, width - localScale(115), localScale(14));
+            setComponentBounds(value, x + width - valueWidth - localScale(4), y, valueWidth, localScale(14));
         }
 
         @Override
@@ -1835,7 +1893,7 @@ public class GUIConfig extends AGUIBase {
 
         @Override
         protected void setPosition(int x, int y, int width) {
-            setComponentBounds(button, x, y, width - 24, 14);
+            setComponentBounds(button, x, y, width - localScale(24), localScale(14));
         }
 
         @Override
@@ -1884,16 +1942,16 @@ public class GUIConfig extends AGUIBase {
         public void render(AGUIBase gui, int mouseX, int mouseY, boolean renderBright, boolean renderLitTexture, boolean blendingEnabled, float partialTicks) {
             if (!blendingEnabled && (focused || isMouseInBounds(mouseX, mouseY))) {
                 String underlineText = focused ? "_" : text;
-                int underlineWidth = Math.min(width - 12, Math.max(18, (int) (RenderText.getStringWidth(underlineText, null) * 0.85F) + 6));
+                int underlineWidth = Math.min(width - localScale(12), Math.max(localScale(18), (int) (RenderText.getStringWidth(underlineText, null) * textScale(0.85F)) + localScale(6)));
                 int underlineX = (int) position.x + (width - underlineWidth) / 2;
-                drawRect(underlineRenderable, underlineX, (int) -position.y + height - 3, underlineWidth, 1, fontColor, 1.0F, getZOffset());
+                drawRect(underlineRenderable, underlineX, (int) -position.y + height - localScale(3), underlineWidth, localScale(1), fontColor, 1.0F, getZOffset());
             }
         }
 
         @Override
         public void renderText(boolean renderTextLit, int worldLightValue) {
             textPosition.x = position.x + width / 2F;
-            RenderText.drawText(focused ? "_" : text, null, textPosition, fontColor, TextAlignment.CENTERED, 0.85F, true, width, renderTextLit || ignoreGUILightingState, worldLightValue);
+            RenderText.drawText(focused ? "_" : text, null, textPosition, fontColor, TextAlignment.CENTERED, textScale(0.85F), true, width, renderTextLit || ignoreGUILightingState, worldLightValue);
         }
     }
 
@@ -1915,18 +1973,18 @@ public class GUIConfig extends AGUIBase {
 
         @Override
         public void render(AGUIBase gui, int mouseX, int mouseY, boolean renderBright, boolean renderLitTexture, boolean blendingEnabled, float partialTicks) {
-            if (!blendingEnabled) {
-                if (outlined) {
-                    drawOutline(underlineRenderable, (int) position.x, (int) -position.y, width, height, enabled ? textColorOverride : COLOR_DIM_TEXT, active || enabled && isMouseInBounds(mouseX, mouseY) ? 1.0F : 0.65F, getZOffset());
-                } else if (enabled && (active || isMouseInBounds(mouseX, mouseY))) {
-                    drawRect(underlineRenderable, (int) position.x, (int) -position.y + height - 3, width, 1, textColorOverride, 1.0F, getZOffset());
+            if (outlined) {
+                drawOutline(underlineRenderable, (int) position.x, (int) -position.y, width, height, enabled ? textColorOverride : COLOR_DIM_TEXT, active || enabled && isMouseInBounds(mouseX, mouseY) ? 1.0F : 0.65F, getZOffset(), blendingEnabled);
+            } else if (!blendingEnabled) {
+                if (enabled && (active || isMouseInBounds(mouseX, mouseY))) {
+                    drawRect(underlineRenderable, (int) position.x, (int) -position.y + height - localScale(2), width, localScale(1), textColorOverride, 1.0F, getZOffset());
                 }
             }
         }
 
         @Override
         public void renderText(boolean renderTextLit, int worldLightValue) {
-            RenderText.drawText(text, null, textPosition, enabled ? textColorOverride : COLOR_DIM_TEXT, TextAlignment.CENTERED, 0.85F, true, width, renderTextLit || ignoreGUILightingState, worldLightValue);
+            RenderText.drawText(text, null, textPosition, enabled ? textColorOverride : COLOR_DIM_TEXT, TextAlignment.CENTERED, textScale(0.85F), true, width, renderTextLit || ignoreGUILightingState, worldLightValue);
         }
     }
 
@@ -1950,28 +2008,30 @@ public class GUIConfig extends AGUIBase {
 
         @Override
         public void render(AGUIBase gui, int mouseX, int mouseY, boolean renderBright, boolean renderLitTexture, boolean blendingEnabled, float partialTicks) {
+            ColorRGB color = active ? COLOR_BUTTON_ACTIVE : enabled && isMouseInBounds(mouseX, mouseY) ? COLOR_BUTTON_HOVER : COLOR_BUTTON;
+            drawRect(backgroundRenderable, (int) position.x, (int) -position.y, width, height, color, BUTTON_ALPHA, getZOffset(), blendingEnabled);
             if (!blendingEnabled) {
-                ColorRGB color = active ? COLOR_BUTTON_ACTIVE : enabled && isMouseInBounds(mouseX, mouseY) ? COLOR_BUTTON_HOVER : COLOR_BUTTON;
-                drawRect(backgroundRenderable, (int) position.x, (int) -position.y, width, height, color, BUTTON_ALPHA, getZOffset());
                 if (outlined) {
                     drawOutline(backgroundRenderable, (int) position.x, (int) -position.y, width, height, COLOR_OUTLINE, 1.0F, getZOffset() + 1);
                 }
                 if (locked) {
-                    drawLockIcon((int) position.x + width - 16, (int) -position.y + 5);
+                    drawLockIcon((int) position.x + width - localScale(16), (int) -position.y + localScale(5));
                 }
             }
         }
 
         @Override
         public void renderText(boolean renderTextLit, int worldLightValue) {
-            RenderText.drawText(text, null, textPosition, locked ? COLOR_DIM_TEXT : COLOR_TEXT, TextAlignment.CENTERED, 0.8F, true, width - (locked ? 18 : 4), renderTextLit || ignoreGUILightingState, worldLightValue);
+            int lockInset = locked ? localScale(18) : 0;
+            textPosition.x = position.x + (width - lockInset) / 2F;
+            RenderText.drawText(text, null, textPosition, locked ? COLOR_DIM_TEXT : COLOR_TEXT, TextAlignment.CENTERED, textScale(0.8F), true, width - (locked ? localScale(18) : localScale(4)), renderTextLit || ignoreGUILightingState, worldLightValue);
         }
 
         private void drawLockIcon(int x, int y) {
-            drawRect(lockRenderable, x + 2, y + 5, 10, 7, locked ? COLOR_DIM_TEXT : COLOR_TEXT, 1.0F, getZOffset() + 1);
-            drawRect(lockRenderable, x + 3, y + 2, 2, 4, locked ? COLOR_DIM_TEXT : COLOR_TEXT, 1.0F, getZOffset() + 1);
-            drawRect(lockRenderable, x + 9, y + 2, 2, 4, locked ? COLOR_DIM_TEXT : COLOR_TEXT, 1.0F, getZOffset() + 1);
-            drawRect(lockRenderable, x + 4, y + 1, 6, 2, locked ? COLOR_DIM_TEXT : COLOR_TEXT, 1.0F, getZOffset() + 1);
+            drawRect(lockRenderable, x + localScale(2), y + localScale(5), localScale(10), localScale(7), locked ? COLOR_DIM_TEXT : COLOR_TEXT, 1.0F, getZOffset() + 1);
+            drawRect(lockRenderable, x + localScale(3), y + localScale(2), localScale(2), localScale(4), locked ? COLOR_DIM_TEXT : COLOR_TEXT, 1.0F, getZOffset() + 1);
+            drawRect(lockRenderable, x + localScale(9), y + localScale(2), localScale(2), localScale(4), locked ? COLOR_DIM_TEXT : COLOR_TEXT, 1.0F, getZOffset() + 1);
+            drawRect(lockRenderable, x + localScale(4), y + localScale(1), localScale(6), localScale(2), locked ? COLOR_DIM_TEXT : COLOR_TEXT, 1.0F, getZOffset() + 1);
         }
     }
 
@@ -2014,7 +2074,7 @@ public class GUIConfig extends AGUIBase {
 
         @Override
         public void renderText(boolean renderTextLit, int worldLightValue) {
-            RenderText.drawText(text, null, textPosition, color, alignment, scale, true, width, renderTextLit || ignoreGUILightingState, worldLightValue);
+            RenderText.drawText(text, null, textPosition, color, alignment, textScale(scale), true, width, renderTextLit || ignoreGUILightingState, worldLightValue);
         }
     }
 
@@ -2038,11 +2098,9 @@ public class GUIConfig extends AGUIBase {
 
         @Override
         public void render(AGUIBase gui, int mouseX, int mouseY, boolean renderBright, boolean renderLitTexture, boolean blendingEnabled, float partialTicks) {
-            if (!blendingEnabled) {
-                drawRect(renderableData, (int) position.x, (int) -position.y, width, height, color, alpha, getZOffset());
-                if (outlineAlpha > 0) {
-                    drawOutline(renderableData, (int) position.x, (int) -position.y, width, height, COLOR_OUTLINE, 1.0F, getZOffset() + 1);
-                }
+            drawRect(renderableData, (int) position.x, (int) -position.y, width, height, color, alpha, getZOffset(), blendingEnabled);
+            if (outlineAlpha > 0) {
+                drawOutline(renderableData, (int) position.x, (int) -position.y, width, height, COLOR_OUTLINE, outlineAlpha, getZOffset() + 1, blendingEnabled);
             }
         }
     }
@@ -2063,8 +2121,14 @@ public class GUIConfig extends AGUIBase {
         data.setColor(color);
         data.setAlpha(alpha);
         data.transform.resetTransforms();
-        data.transform.setTranslation(x, -y, z);
+        data.transform.setTranslation(x, -y, getRectRenderZ(alpha, z));
         data.render();
+    }
+
+    private void drawRect(RenderableData data, int x, int y, int width, int height, ColorRGB color, float alpha, int z, boolean blendingEnabled) {
+        if (shouldRenderInPass(alpha, blendingEnabled)) {
+            drawRect(data, x, y, width, height, color, alpha, z);
+        }
     }
 
     private void drawScaledRect(RenderableData data, double x, double y, int width, int height, double scaleX, double scaleY, ColorRGB color, float alpha, int z) {
@@ -2075,9 +2139,15 @@ public class GUIConfig extends AGUIBase {
         data.setColor(color);
         data.setAlpha(alpha);
         data.transform.resetTransforms();
-        data.transform.setTranslation(x, -y, z);
+        data.transform.setTranslation(x, -y, getRectRenderZ(alpha, z));
         data.transform.applyScaling(scaleX, scaleY, 1.0D);
         data.render();
+    }
+
+    private void drawScaledRect(RenderableData data, double x, double y, int width, int height, double scaleX, double scaleY, ColorRGB color, float alpha, int z, boolean blendingEnabled) {
+        if (shouldRenderInPass(alpha, blendingEnabled)) {
+            drawScaledRect(data, x, y, width, height, scaleX, scaleY, color, alpha, z);
+        }
     }
 
     private void drawOutline(RenderableData data, int x, int y, int width, int height, ColorRGB color, float alpha, int z) {
@@ -2085,5 +2155,20 @@ public class GUIConfig extends AGUIBase {
         drawScaledRect(data, x, y + height - OUTLINE_THICKNESS, width, 1, 1.0D, OUTLINE_THICKNESS, color, alpha, z);
         drawScaledRect(data, x, y, 1, height, OUTLINE_THICKNESS, 1.0D, color, alpha, z);
         drawScaledRect(data, x + width - OUTLINE_THICKNESS, y, 1, height, OUTLINE_THICKNESS, 1.0D, color, alpha, z);
+    }
+
+    private void drawOutline(RenderableData data, int x, int y, int width, int height, ColorRGB color, float alpha, int z, boolean blendingEnabled) {
+        drawScaledRect(data, x, y, width, 1, 1.0D, OUTLINE_THICKNESS, color, alpha, z, blendingEnabled);
+        drawScaledRect(data, x, y + height - OUTLINE_THICKNESS, width, 1, 1.0D, OUTLINE_THICKNESS, color, alpha, z, blendingEnabled);
+        drawScaledRect(data, x, y, 1, height, OUTLINE_THICKNESS, 1.0D, color, alpha, z, blendingEnabled);
+        drawScaledRect(data, x + width - OUTLINE_THICKNESS, y, 1, height, OUTLINE_THICKNESS, 1.0D, color, alpha, z, blendingEnabled);
+    }
+
+    private boolean shouldRenderInPass(float alpha, boolean blendingEnabled) {
+        return alpha > 0.0F && (alpha < 1.0F) == blendingEnabled;
+    }
+
+    private int getRectRenderZ(float alpha, int z) {
+        return alpha >= 1.0F ? z + DECORATION_Z_OFFSET : z;
     }
 }

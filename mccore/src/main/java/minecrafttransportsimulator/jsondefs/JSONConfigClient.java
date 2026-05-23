@@ -56,7 +56,7 @@ public class JSONConfigClient {
         public JSONConfigEntry<Boolean> heliAutoLevel = new JSONConfigEntry<>(false, "If true, helicopters will automatically return to level flight when you let off the control stick.  However, this will prevent them from doing loops.  The realistic value for this config is false, but the one that's more player-freindly is true.");
         public JSONConfigEntry<Boolean> mouseYoke = new JSONConfigEntry<>(false, "If true, aircraft pitch and roll are controlled by an invisible on-screen mouse yoke.  Cursor center is neutral; window edges are full input.");
         public JSONConfigEntry<Boolean> arcadeMode = new JSONConfigEntry<>(false, "If true, arcade-style mouse flight will be enabled.  This allows the mouse cursor to control aircraft and helicopter steering systems.");
-        public JSONConfigEntry<Boolean> aimAssist = new JSONConfigEntry<>(false, "If true, the assisted aiming crosshair will be enabled for active vehicle guns.");
+        public JSONConfigEntry<Boolean> aimAssist = new JSONConfigEntry<>(true, "If true, the assisted aiming crosshair will be enabled for active vehicle guns.");
 
         public JSONConfigEntry<Boolean> classicJystk = new JSONConfigEntry<>(false, "If true, the classic controller code will be used.  Note: THIS CODE MAY CRASH MOBILE DEVICES!  Also note that switching will probably mess up your keybinds.  Only do this if you are having issues with a joystick or controller not being recognized.  After changing this setting, reboot the game to make it take effect.");
 
