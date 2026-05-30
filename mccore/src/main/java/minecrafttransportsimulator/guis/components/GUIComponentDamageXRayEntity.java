@@ -4,10 +4,15 @@ import minecrafttransportsimulator.baseclasses.Point3D;
 import minecrafttransportsimulator.baseclasses.RotationMatrix;
 import minecrafttransportsimulator.baseclasses.TransformationMatrix;
 import minecrafttransportsimulator.baseclasses.BoundingBox;
+import minecrafttransportsimulator.baseclasses.ColorRGB;
 import minecrafttransportsimulator.entities.components.AEntityC_Renderable;
 import minecrafttransportsimulator.entities.components.AEntityE_Interactable;
 import minecrafttransportsimulator.entities.components.AEntityF_Multipart;
 import minecrafttransportsimulator.entities.instances.APart;
+import minecrafttransportsimulator.entities.instances.PartEngine;
+import minecrafttransportsimulator.entities.instances.PartGroundDevice;
+import minecrafttransportsimulator.entities.instances.PartGun;
+import minecrafttransportsimulator.entities.instances.PartInteractable;
 import minecrafttransportsimulator.systems.DamageXRaySystem;
 import minecrafttransportsimulator.systems.DamageXRaySystem.Analysis;
 
@@ -66,21 +71,28 @@ public class GUIComponentDamageXRayEntity extends AGUIComponent {
 
         DamageXRaySystem.beginPerspectiveProjection(position.x + width / 2D, position.y - height / 2D - 5, getZOffset(), Math.max(width, height) * 1.35D);
         try {
-            if (!blendingEnabled) {
-                DamageXRaySystem.beginModelRender(DamageXRaySystem.XRAY_HULL_COLOR, 1.0F);
+            if (blendingEnabled) {
+                DamageXRaySystem.beginModelRender(ColorRGB.WHITE, DamageXRaySystem.XRAY_MODEL_ALPHA * analysis.getAlpha(), true);
                 try {
                     renderEntity(analysis.targetEntity, analysis.targetEntity, baseTransform, partialTicks, blendingEnabled, true, false);
+                    if (analysis.targetEntity instanceof AEntityF_Multipart) {
+                        for (APart part : ((AEntityF_Multipart<?>) analysis.targetEntity).allParts) {
+                            if (part.isValid && !isXRayModule(part)) {
+                                renderEntity(analysis.targetEntity, part, baseTransform, partialTicks, blendingEnabled, true, false);
+                            }
+                        }
+                    }
                 } finally {
                     DamageXRaySystem.endModelRender();
                 }
-            } else {
-                DamageXRaySystem.beginModelRender(DamageXRaySystem.XRAY_DETAIL_COLOR, 0.60F * analysis.getAlpha());
+
+                DamageXRaySystem.beginModelRender(DamageXRaySystem.XRAY_DETAIL_COLOR, DamageXRaySystem.XRAY_MODEL_ALPHA * analysis.getAlpha());
                 try {
                     renderEntity(analysis.targetEntity, analysis.targetEntity, baseTransform, partialTicks, blendingEnabled, false, true);
                     if (analysis.targetEntity instanceof AEntityF_Multipart) {
                         for (APart part : ((AEntityF_Multipart<?>) analysis.targetEntity).allParts) {
                             if (part.isValid) {
-                                renderEntity(analysis.targetEntity, part, baseTransform, partialTicks, blendingEnabled, true, true);
+                                renderEntity(analysis.targetEntity, part, baseTransform, partialTicks, blendingEnabled, isXRayModule(part), true);
                             }
                         }
                     }
@@ -91,6 +103,21 @@ public class GUIComponentDamageXRayEntity extends AGUIComponent {
         } finally {
             DamageXRaySystem.endPerspectiveProjection();
         }
+    }
+
+    private static boolean isXRayModule(APart part) {
+        return !isTurretPart(part) && (part instanceof PartEngine || part instanceof PartGun || part instanceof PartInteractable || part instanceof PartGroundDevice);
+    }
+
+    private static boolean isTurretPart(APart part) {
+        if (part.placementDefinition.types != null) {
+            for (String type : part.placementDefinition.types) {
+                if (type.contains("gun_turret") || type.contains("generic_turret")) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     private void renderEntity(AEntityE_Interactable<?> targetEntity, AEntityE_Interactable<?> entity, TransformationMatrix baseTransform, float partialTicks, boolean blendingEnabled, boolean renderModel, boolean renderHealthBoxes) {

@@ -23,17 +23,19 @@ public class GUIComponentDamageXRay extends AGUIComponent {
     private static final int MAX_LINES = 36;
     private static final int HIT_MARKER_SEGMENTS = 28;
     private static final int FLOATS_PER_VERTEX = 8;
+    private static final int VERTICES_PER_STRIP = 6;
+    private static final float PROJECTILE_TRAIL_WIDTH = 0.7F;
     private static final ColorRGB LINE_COLOR = new ColorRGB(106, 220, 255);
     private static final ColorRGB FRAGMENT_COLOR = new ColorRGB(255, 174, 74);
     private static final ColorRGB TEXT_COLOR = new ColorRGB(225, 248, 255);
     private static final ColorRGB ALERT_COLOR = new ColorRGB(255, 126, 104);
 
     private final RenderableData lineRenderable;
-    private final RenderableData fragmentRenderable;
+    private final RenderableData trailRenderable;
+    private final RenderableData fragmentLineRenderable;
     private final RenderableData hitMarkerRenderable;
     private final Point3D textHelper = new Point3D();
     private final Point3D pathStart = new Point3D();
-    private final Point3D pathEnd = new Point3D();
     private final Point3D currentProjectile = new Point3D();
     private final Point3D currentProjectileWorld = new Point3D();
     private final Point3D fragmentStart = new Point3D();
@@ -51,10 +53,14 @@ public class GUIComponentDamageXRay extends AGUIComponent {
         lineRenderable.setColor(LINE_COLOR);
         lineRenderable.setAlpha(0.95F);
         lineRenderable.setLightMode(LightingMode.IGNORE_ALL_LIGHTING);
-        fragmentRenderable = new RenderableData(new RenderableVertices(DamageXRaySystem.MAX_FRAGMENT_EVENTS), null);
-        fragmentRenderable.setColor(FRAGMENT_COLOR);
-        fragmentRenderable.setAlpha(0.72F);
-        fragmentRenderable.setLightMode(LightingMode.IGNORE_ALL_LIGHTING);
+        trailRenderable = new RenderableData(new RenderableVertices("XRAY_PROJECTILE_TRAIL", FloatBuffer.allocate(VERTICES_PER_STRIP * FLOATS_PER_VERTEX), false), DamageXRaySystem.XRAY_SOLID_TEXTURE);
+        trailRenderable.setColor(LINE_COLOR);
+        trailRenderable.setAlpha(0.75F);
+        trailRenderable.setLightMode(LightingMode.IGNORE_ALL_LIGHTING);
+        fragmentLineRenderable = new RenderableData(new RenderableVertices(DamageXRaySystem.MAX_FRAGMENT_EVENTS), null);
+        fragmentLineRenderable.setColor(FRAGMENT_COLOR);
+        fragmentLineRenderable.setAlpha(0.72F);
+        fragmentLineRenderable.setLightMode(LightingMode.IGNORE_ALL_LIGHTING);
         hitMarkerRenderable = new RenderableData(new RenderableVertices("XRAY_HIT_MARKERS", FloatBuffer.allocate(DamageXRaySystem.MAX_EVENTS * HIT_MARKER_SEGMENTS * 3 * FLOATS_PER_VERTEX), false), DamageXRaySystem.XRAY_SOLID_TEXTURE);
         hitMarkerRenderable.setColor(ALERT_COLOR);
         hitMarkerRenderable.setAlpha(0.48F);
@@ -90,9 +96,11 @@ public class GUIComponentDamageXRay extends AGUIComponent {
 
     private void renderTrace(Analysis analysis, float alpha, float partialTicks) {
         FloatBuffer vertices = lineRenderable.vertexObject.vertices;
-        FloatBuffer fragmentVertices = fragmentRenderable.vertexObject.vertices;
+        FloatBuffer trailVertices = trailRenderable.vertexObject.vertices;
+        FloatBuffer fragmentVertices = fragmentLineRenderable.vertexObject.vertices;
         FloatBuffer hitMarkerVertices = hitMarkerRenderable.vertexObject.vertices;
         vertices.clear();
+        trailVertices.clear();
         fragmentVertices.clear();
         hitMarkerVertices.clear();
         int linesUsed = 0;
@@ -107,10 +115,9 @@ public class GUIComponentDamageXRay extends AGUIComponent {
 
         float playbackProgress = analysis.getPlaybackProgress();
         projectPathPoint(analysis, analysis.startPosition, partialTicks, width, height, viewRotation, targetPosition, focusPosition, pathStart);
-        projectPathPoint(analysis, analysis.endPosition, partialTicks, width, height, viewRotation, targetPosition, focusPosition, pathEnd);
         currentProjectileWorld.set(analysis.startPosition).interpolate(analysis.endPosition, playbackProgress);
         projectPathPoint(analysis, currentProjectileWorld, partialTicks, width, height, viewRotation, targetPosition, focusPosition, currentProjectile);
-        linesUsed = addLine(vertices, linesUsed, (float) pathStart.x, (float) pathStart.y, (float) currentProjectile.x, (float) currentProjectile.y);
+        addStrip(trailVertices, (float) pathStart.x, (float) pathStart.y, (float) currentProjectile.x, (float) currentProjectile.y, PROJECTILE_TRAIL_WIDTH);
 
         for (FragmentEvent event : analysis.fragmentEvents) {
             float fragmentProgress = analysis.getFragmentProgress(event);
@@ -141,15 +148,19 @@ public class GUIComponentDamageXRay extends AGUIComponent {
             fragmentLinesUsed = addLine(fragmentVertices, fragmentLinesUsed, 0, 0, 0, 0);
         }
         vertices.flip();
+        trailVertices.flip();
         fragmentVertices.flip();
         hitMarkerVertices.flip();
 
         lineRenderable.transform.setTranslation(position.x, position.y, MODEL_DEFAULT_ZOFFSET + 30);
         lineRenderable.setAlpha(0.95F * alpha);
         lineRenderable.render();
-        fragmentRenderable.transform.setTranslation(position.x, position.y, MODEL_DEFAULT_ZOFFSET + 34);
-        fragmentRenderable.setAlpha(0.72F * alpha);
-        fragmentRenderable.render();
+        trailRenderable.transform.setTranslation(position.x, position.y, MODEL_DEFAULT_ZOFFSET + 32);
+        trailRenderable.setAlpha(0.75F * alpha);
+        trailRenderable.render();
+        fragmentLineRenderable.transform.setTranslation(position.x, position.y, MODEL_DEFAULT_ZOFFSET + 34);
+        fragmentLineRenderable.setAlpha(0.72F * alpha);
+        fragmentLineRenderable.render();
         hitMarkerRenderable.transform.setTranslation(position.x, position.y, MODEL_DEFAULT_ZOFFSET + 42);
         hitMarkerRenderable.setAlpha(0.48F * alpha);
         hitMarkerRenderable.render();
@@ -163,6 +174,35 @@ public class GUIComponentDamageXRay extends AGUIComponent {
         vertices.put(y2);
         vertices.put(0);
         return lineIndex + 1;
+    }
+
+    private static void addStrip(FloatBuffer vertices, float x1, float y1, float x2, float y2, float width) {
+        float deltaX = x2 - x1;
+        float deltaY = y2 - y1;
+        float length = (float) Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+        if (length <= 0.1F) {
+            return;
+        }
+
+        float offsetX = -deltaY / length * width / 2.0F;
+        float offsetY = deltaX / length * width / 2.0F;
+        addStripVertex(vertices, x1 + offsetX, y1 + offsetY);
+        addStripVertex(vertices, x2 + offsetX, y2 + offsetY);
+        addStripVertex(vertices, x2 - offsetX, y2 - offsetY);
+        addStripVertex(vertices, x1 + offsetX, y1 + offsetY);
+        addStripVertex(vertices, x2 - offsetX, y2 - offsetY);
+        addStripVertex(vertices, x1 - offsetX, y1 - offsetY);
+    }
+
+    private static void addStripVertex(FloatBuffer vertices, float x, float y) {
+        vertices.put(0);
+        vertices.put(0);
+        vertices.put(1);
+        vertices.put(0.5F);
+        vertices.put(0.5F);
+        vertices.put(x);
+        vertices.put(y);
+        vertices.put(0);
     }
 
     private static void addCircle(FloatBuffer vertices, float centerX, float centerY, float radius) {

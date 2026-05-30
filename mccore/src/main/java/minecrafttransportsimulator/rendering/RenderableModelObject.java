@@ -177,7 +177,7 @@ public class RenderableModelObject {
 
             //If we are a online texture, bind that one rather than our own.
             //We do this first since we don't need to calculate other stuff if we aren't rendering.
-            if (renderingDamageXRay) {
+            if (renderingDamageXRay && !DamageXRaySystem.isActiveModelRenderUsingOriginalTexture()) {
                 renderable.setTexture(DamageXRaySystem.XRAY_SOLID_TEXTURE);
             } else if (isOnlineTexture) {
                 //Get the texture from the text objects of the entity.

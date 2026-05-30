@@ -21,12 +21,13 @@ public class DamageXRaySystem {
     public static final int MAX_EVENTS = 12;
     public static final int MAX_FRAGMENT_EVENTS = 48;
     public static final String XRAY_SOLID_TEXTURE = "mts:textures/rendering/light.png";
-    public static final ColorRGB XRAY_HULL_COLOR = ColorRGB.BLACK;
-    public static final ColorRGB XRAY_DETAIL_COLOR = new ColorRGB(110, 220, 255);
+    public static final ColorRGB XRAY_DETAIL_COLOR = new ColorRGB(118, 160, 174);
+    public static final float XRAY_MODEL_ALPHA = 0.50F;
     private static final long DISPLAY_DURATION_MS = 7000;
     private static final long PLAYBACK_DURATION_MS = 3000;
     private static final long FADE_DURATION_MS = 650;
     private static final long CAMERA_TURN_DURATION_MS = 3000;
+    private static final long FRAGMENT_REPLAY_DURATION_MS = 1000;
     private static final double CAMERA_TURN_ANGLE_DEGREES = 45.0D;
 
     private static Analysis activeAnalysis;
@@ -34,6 +35,7 @@ public class DamageXRaySystem {
     private static int activeProjectionDepth;
     private static float activeModelRenderAlpha = 1.0F;
     private static ColorRGB activeModelRenderColor = ColorRGB.WHITE;
+    private static boolean activeModelRenderOriginalTexture;
     private static double activeProjectionCenterX;
     private static double activeProjectionCenterY;
     private static double activeProjectionBaseZ;
@@ -59,9 +61,14 @@ public class DamageXRaySystem {
     }
 
     public static void beginModelRender(ColorRGB color, float alpha) {
+        beginModelRender(color, alpha, false);
+    }
+
+    public static void beginModelRender(ColorRGB color, float alpha, boolean useOriginalTexture) {
         ++activeModelRenderDepth;
         activeModelRenderColor = color;
         activeModelRenderAlpha = alpha;
+        activeModelRenderOriginalTexture = useOriginalTexture;
     }
 
     public static void beginPerspectiveProjection(double centerX, double centerY, double baseZ, double cameraDistance) {
@@ -79,6 +86,7 @@ public class DamageXRaySystem {
         if (activeModelRenderDepth == 0) {
             activeModelRenderColor = ColorRGB.WHITE;
             activeModelRenderAlpha = 1.0F;
+            activeModelRenderOriginalTexture = false;
         }
     }
 
@@ -98,6 +106,10 @@ public class DamageXRaySystem {
 
     public static ColorRGB getActiveModelRenderColor() {
         return activeModelRenderColor;
+    }
+
+    public static boolean isActiveModelRenderUsingOriginalTexture() {
+        return activeModelRenderOriginalTexture;
     }
 
     public static boolean isPerspectiveProjectionActive() {
@@ -307,8 +319,8 @@ public class DamageXRaySystem {
         }
 
         public float getFragmentProgress(FragmentEvent event) {
-            float fragmentProgress = (getPlaybackProgress() - (float) event.pathProgress) / 0.20F;
-            return Math.max(0.0F, Math.min(1.0F, fragmentProgress));
+            long fragmentAge = System.currentTimeMillis() - (createdTime + (long) (PLAYBACK_DURATION_MS * event.pathProgress));
+            return fragmentAge >= 0 ? Math.min(1.0F, fragmentAge / (float) FRAGMENT_REPLAY_DURATION_MS) : -1.0F;
         }
 
         public float getAlpha() {
