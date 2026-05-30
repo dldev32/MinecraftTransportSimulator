@@ -10,6 +10,7 @@ import minecrafttransportsimulator.entities.components.AEntityE_Interactable;
 import minecrafttransportsimulator.mcinterface.AWrapperWorld;
 import minecrafttransportsimulator.packets.components.APacketBase;
 import minecrafttransportsimulator.systems.DamageXRaySystem;
+import minecrafttransportsimulator.systems.DamageXRaySystem.FragmentEvent;
 import minecrafttransportsimulator.systems.DamageXRaySystem.HitEvent;
 import minecrafttransportsimulator.systems.DamageXRaySystem.ResultType;
 
@@ -28,8 +29,9 @@ public class PacketEntityBulletHitXRay extends APacketBase {
     private final Point3D endPosition;
     private final ResultType resultType;
     private final List<HitEvent> hitEvents;
+    private final List<FragmentEvent> fragmentEvents;
 
-    public PacketEntityBulletHitXRay(AEntityE_Interactable<?> targetEntity, UUID gunID, int bulletNumber, String bulletName, String targetName, String bulletModelLocation, String bulletTextureLocation, Point3D startPosition, Point3D endPosition, ResultType resultType, List<HitEvent> hitEvents) {
+    public PacketEntityBulletHitXRay(AEntityE_Interactable<?> targetEntity, UUID gunID, int bulletNumber, String bulletName, String targetName, String bulletModelLocation, String bulletTextureLocation, Point3D startPosition, Point3D endPosition, ResultType resultType, List<HitEvent> hitEvents, List<FragmentEvent> fragmentEvents) {
         super(null);
         this.targetID = targetEntity.uniqueUUID;
         this.gunID = gunID;
@@ -42,6 +44,7 @@ public class PacketEntityBulletHitXRay extends APacketBase {
         this.endPosition = endPosition;
         this.resultType = resultType;
         this.hitEvents = hitEvents;
+        this.fragmentEvents = fragmentEvents;
     }
 
     public PacketEntityBulletHitXRay(ByteBuf buf) {
@@ -72,6 +75,15 @@ public class PacketEntityBulletHitXRay extends APacketBase {
             boolean forwardedDamage = buf.readBoolean();
             if (i < DamageXRaySystem.MAX_EVENTS) {
                 hitEvents.add(new HitEvent(hitPosition, groupIndex, boxIndex, componentName, armorThickness, penetrationPotential, armorPenetrated, collisionDamage, entityDamage, stopped, forwardedDamage));
+            }
+        }
+        int fragmentEventCount = buf.readInt();
+        this.fragmentEvents = new ArrayList<>();
+        for (int i = 0; i < fragmentEventCount; ++i) {
+            Point3D fragmentStartPosition = readPoint3dFromBuffer(buf);
+            Point3D fragmentEndPosition = readPoint3dFromBuffer(buf);
+            if (i < DamageXRaySystem.MAX_FRAGMENT_EVENTS) {
+                fragmentEvents.add(new FragmentEvent(fragmentStartPosition, fragmentEndPosition));
             }
         }
     }
@@ -105,11 +117,18 @@ public class PacketEntityBulletHitXRay extends APacketBase {
             buf.writeBoolean(event.stopped);
             buf.writeBoolean(event.forwardedDamage);
         }
+        int fragmentEventCount = fragmentEvents != null ? Math.min(fragmentEvents.size(), DamageXRaySystem.MAX_FRAGMENT_EVENTS) : 0;
+        buf.writeInt(fragmentEventCount);
+        for (int i = 0; i < fragmentEventCount; ++i) {
+            FragmentEvent event = fragmentEvents.get(i);
+            writePoint3dToBuffer(event.startPosition, buf);
+            writePoint3dToBuffer(event.endPosition, buf);
+        }
     }
 
     @Override
     public void handle(AWrapperWorld world) {
         AEntityE_Interactable<?> targetEntity = world.getEntity(targetID);
-        DamageXRaySystem.displayAnalysis(targetEntity, gunID, bulletNumber, bulletName, targetName, bulletModelLocation.isEmpty() ? null : bulletModelLocation, bulletTextureLocation.isEmpty() ? null : bulletTextureLocation, startPosition, endPosition, resultType, hitEvents);
+        DamageXRaySystem.displayAnalysis(targetEntity, gunID, bulletNumber, bulletName, targetName, bulletModelLocation.isEmpty() ? null : bulletModelLocation, bulletTextureLocation.isEmpty() ? null : bulletTextureLocation, startPosition, endPosition, resultType, hitEvents, fragmentEvents);
     }
 }

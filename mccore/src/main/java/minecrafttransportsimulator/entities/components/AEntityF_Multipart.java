@@ -20,10 +20,12 @@ import minecrafttransportsimulator.baseclasses.ComputedVariable;
 import minecrafttransportsimulator.baseclasses.Damage;
 import minecrafttransportsimulator.baseclasses.EntityManager;
 import minecrafttransportsimulator.baseclasses.Point3D;
+import minecrafttransportsimulator.baseclasses.RotationMatrix;
 import minecrafttransportsimulator.baseclasses.TransformationMatrix;
 import minecrafttransportsimulator.entities.instances.APart;
 import minecrafttransportsimulator.entities.instances.EntityBullet;
 import minecrafttransportsimulator.entities.instances.EntityBullet.HitType;
+import minecrafttransportsimulator.jsondefs.JSONBullet.BulletType;
 import minecrafttransportsimulator.entities.instances.EntityPlacedPart;
 import minecrafttransportsimulator.items.components.AItemBase;
 import minecrafttransportsimulator.items.components.AItemPart;
@@ -42,6 +44,7 @@ import minecrafttransportsimulator.mcinterface.IWrapperPlayer;
 import minecrafttransportsimulator.mcinterface.InterfaceManager;
 import minecrafttransportsimulator.packets.instances.PacketEntityBulletHitCollision;
 import minecrafttransportsimulator.packets.instances.PacketEntityBulletHitEntity;
+import minecrafttransportsimulator.packets.instances.PacketEntityBulletHitExternalEntity;
 import minecrafttransportsimulator.packets.instances.PacketEntityBulletHitGeneric;
 import minecrafttransportsimulator.packets.instances.PacketEntityBulletHitXRay;
 import minecrafttransportsimulator.packets.instances.PacketPartChange_Add;
@@ -50,6 +53,7 @@ import minecrafttransportsimulator.packets.instances.PacketPlayerChatMessage;
 import minecrafttransportsimulator.packloading.LegacyCompatSystem;
 import minecrafttransportsimulator.packloading.PackParser;
 import minecrafttransportsimulator.systems.DamageXRaySystem;
+import minecrafttransportsimulator.systems.DamageXRaySystem.FragmentEvent;
 import minecrafttransportsimulator.systems.DamageXRaySystem.HitEvent;
 import minecrafttransportsimulator.systems.DamageXRaySystem.ResultType;
 import minecrafttransportsimulator.systems.LanguageSystem;
@@ -335,6 +339,7 @@ public abstract class AEntityF_Multipart<JSONDefinition extends AJSONPartProvide
      */
     public EntityBullet.HitType attackProjectile(Damage damage, EntityBullet bullet, Collection<BoundingBoxHitResult> hitBoxes) {
         List<HitEvent> xrayEvents = bullet != null ? new ArrayList<>() : null;
+        List<FragmentEvent> xrayFragments = bullet != null ? new ArrayList<>() : null;
         Point3D xrayStartPosition = bullet != null ? bullet.position.copy() : null;
         AEntityE_Interactable<?> xrayTargetEntity = null;
 
@@ -370,13 +375,17 @@ public abstract class AEntityF_Multipart<JSONDefinition extends AJSONPartProvide
             if (hitEntry.box.groupDef != null && (hitEntry.box.groupDef.armorThickness != 0 || hitEntry.box.groupDef.heatArmorThickness != 0)) {
                 hitOperationalHitbox = true;
                 if (bullet != null) {
-                    double armorThickness = hitEntry.box.definition != null ? (bullet.definition.bullet.isHeat && hitEntry.box.groupDef.heatArmorThickness != 0 ? hitEntry.box.groupDef.heatArmorThickness : hitEntry.box.groupDef.armorThickness) : 0;
-                    double penetrationPotential = bullet.definition.bullet.isHeat ? bullet.definition.bullet.armorPenetration : (bullet.definition.bullet.armorPenetration * bullet.velocity / bullet.initialVelocity);
-                    bullet.armorPenetrated += armorThickness;
-                    bullet.displayDebugMessage("HIT ARMOR OF: " + (int) armorThickness);
-                    boolean armorStopped = bullet.armorPenetrated > penetrationPotential;
-                    recordXRayEvent(xrayEvents, hitEntity, hitEntry, armorThickness, penetrationPotential, bullet.armorPenetrated, 0, 0, armorStopped, false);
+                    boolean bulletIsHeat = bullet.definition.bullet.types.contains(BulletType.HEAT);
+                    double armorThickness = hitEntry.box.definition != null ? (bulletIsHeat && hitEntry.box.groupDef.heatArmorThickness != 0 ? hitEntry.box.groupDef.heatArmorThickness : hitEntry.box.groupDef.armorThickness) : 0;
+                    double penetrationPotential = bulletIsHeat ? bullet.definition.bullet.armorPenetration : (bullet.definition.bullet.armorPenetration * bullet.velocity / bullet.initialVelocity);
 
+                    //Armor-piercing and sub-caliber projectiles lose some of their armor penetration when penetrating the armor boxes.
+                    //Heat projectiles use their base penetration directly without scaling.
+                    bullet.armorPenetrated += armorThickness;
+                    bullet.displayDebugMessage("HIT ARMOR: " + (int) armorThickness + " TOTAL ARMOR HIT: " + (int) bullet.armorPenetrated + " / PENETRATED " + (int) penetrationPotential);
+
+                    boolean armorStopped = bullet.armorPenetrated > penetrationPotential;
+                    recordXRayEvent(xrayEvents, hitEntity, hitEntry, armorThickness, penetrationPotential, bullet.armorPenetrated, 0, 0, armorStopped || bulletIsHeat, false);
                     if (armorStopped) {
                         //Bullet hit too much armor.
                         if (world.isClient()) {
@@ -385,8 +394,102 @@ public abstract class AEntityF_Multipart<JSONDefinition extends AJSONPartProvide
                         } else {
                             EntityBullet.performGenericHitLogic(bullet.gun, bullet.bulletNumber, hitEntry.position, hitEntry.side, HitType.ARMOR);
                         }
-                        displayXRayAnalysis(xrayTargetEntity, bullet, xrayStartPosition, hitEntry.position, ResultType.ARMOR_STOP, xrayEvents);
-                        bullet.displayDebugMessage("HIT TOO MUCH ARMOR.  MAX PEN: " + (int) penetrationPotential);
+                        if (bulletIsHeat) {
+                            bullet.displayDebugMessage("HEAT FAILED TO PENETRATE ARMOR. MAX PEN: " + (int) penetrationPotential);
+                        } else {
+                            bullet.displayDebugMessage("HIT TOO MUCH ARMOR. MAX PEN: " + (int) penetrationPotential);
+                        }
+                        displayXRayAnalysis(xrayTargetEntity, bullet, xrayStartPosition, hitEntry.position, ResultType.ARMOR_STOP, xrayEvents, xrayFragments);
+                        return EntityBullet.HitType.ARMOR;
+                    }
+
+                    //If the bullet has FRAG type and penetrated armor, deal fragmentation damage to internals.
+                    if (bullet.definition.bullet.types.contains(BulletType.FRAG) && bullet.definition.bullet.fragDamage > 0 && bullet.definition.bullet.fragCount > 0) {
+                        int fragBoxesHit = 0;
+                        int fragEntitiesHit = 0;
+                        int fragCount = bullet.definition.bullet.fragCount;
+                        float coneAngle = bullet.definition.bullet.fragConeAngle > 0 ? bullet.definition.bullet.fragConeAngle : 45.0f;
+                        float fragDmg = bullet.definition.bullet.fragDamage;
+                        double coneAngleRad = Math.min(Math.PI, Math.toRadians(coneAngle / 2.0));
+                        double coneRange = bullet.definition.bullet.fragRange > 0 ? bullet.definition.bullet.fragRange : bullet.definition.bullet.diameter / 10.0;
+                        Point3D fragStart = hitEntry.position.copy().addScaled(bullet.motion.copy().normalize(), 0.001D);
+                        RotationMatrix fragOrientation = new RotationMatrix().setToVector(bullet.motion, true);
+
+                        for (int i = 0; i < fragCount; ++i) {
+                            double cosTheta = 1D - Math.random() * (1D - Math.cos(coneAngleRad));
+                            double sinTheta = Math.sqrt(1D - cosTheta * cosTheta);
+                            double phi = Math.random() * 2D * Math.PI;
+                            Point3D fragVector = new Point3D(sinTheta * Math.cos(phi), sinTheta * Math.sin(phi), cosTheta).rotate(fragOrientation).scale(coneRange);
+                            Point3D fragEnd = fragStart.copy().add(fragVector);
+                            BoundingBox fragMovementBounds = new BoundingBox(fragStart, fragEnd);
+                            BoundingBoxHitResult fragBoxHit = null;
+
+                            Collection<BoundingBoxHitResult> fragHitBoxes = getHitBoxes(fragStart, fragEnd, fragMovementBounds, true);
+                            if (fragHitBoxes != null) {
+                                for (BoundingBoxHitResult fragHitEntry : fragHitBoxes) {
+                                    if (fragHitEntry.box != hitEntry.box && fragHitEntry.box.groupDef != hitEntry.box.groupDef) {
+                                        fragBoxHit = fragHitEntry;
+                                        break;
+                                    }
+                                }
+                            }
+
+                            IWrapperEntity fragEntityHit = null;
+                            BoundingBox fragEntityBox = null;
+                            Point3D fragEntityHitPosition = null;
+                            for (APart part : allParts) {
+                                if (part.rider != null) {
+                                    BoundingBox riderBounds = part.rider.getBounds();
+                                    if (riderBounds.intersects(fragMovementBounds)) {
+                                        BoundingBoxHitResult riderHit = riderBounds.getIntersection(fragStart, fragEnd);
+                                        if (riderHit != null && (fragEntityHitPosition == null || fragStart.isFirstCloserThanSecond(riderHit.position, fragEntityHitPosition))) {
+                                            fragEntityHit = part.rider;
+                                            fragEntityBox = riderBounds;
+                                            fragEntityHitPosition = riderHit.position;
+                                        }
+                                    }
+                                }
+                            }
+
+                            if (fragBoxHit != null && (fragEntityHitPosition == null || fragStart.isFirstCloserThanSecond(fragBoxHit.position, fragEntityHitPosition))) {
+                                recordXRayFragment(xrayFragments, fragStart, fragBoxHit.position);
+                                APart fragHitPart = getPartWithBox(fragBoxHit.box);
+                                AEntityF_Multipart<?> fragHitEntity = fragHitPart != null ? fragHitPart : this;
+                                Damage fragDamage = new Damage(fragDmg, fragBoxHit.box, bullet.gun, bullet.gun.lastController, null);
+                                fragDamage.ignoreCooldown = true;
+                                if (world.isClient()) {
+                                    InterfaceManager.packetInterface.sendToServer(new PacketEntityBulletHitEntity(bullet.gun, fragHitEntity, fragDamage));
+                                } else {
+                                    EntityBullet.performEntityHitLogic(fragHitEntity, fragDamage);
+                                }
+                                ++fragBoxesHit;
+                            } else if (fragEntityHit != null) {
+                                recordXRayFragment(xrayFragments, fragStart, fragEntityHitPosition);
+                                Damage fragDamage = new Damage(fragDmg, fragEntityBox, bullet.gun, bullet.gun.lastController, null);
+                                fragDamage.ignoreCooldown = true;
+                                if (world.isClient()) {
+                                    InterfaceManager.packetInterface.sendToServer(new PacketEntityBulletHitExternalEntity(fragEntityHit, fragDamage));
+                                } else {
+                                    EntityBullet.performExternalEntityHitLogic(fragEntityHit, fragDamage);
+                                }
+                                ++fragEntitiesHit;
+                            } else {
+                                recordXRayFragment(xrayFragments, fragStart, fragEnd);
+                            }
+                        }
+                        bullet.displayDebugMessage("FRAG HIT " + fragBoxesHit + " BOXES AND " + fragEntitiesHit + " ENTITIES");
+                    }
+
+                    //HEAT shells detonate on armor contact and do not continue flying.
+                    if (bulletIsHeat) {
+                        bullet.displayDebugMessage("HEAT DETONATED ON ARMOR.");
+                        if (world.isClient()) {
+                            InterfaceManager.packetInterface.sendToServer(new PacketEntityBulletHitGeneric(bullet.gun, bullet.bulletNumber, hitEntry.position, hitEntry.side, HitType.ARMOR));
+                            bullet.waitingOnActionPacket = true;
+                        } else {
+                            EntityBullet.performGenericHitLogic(bullet.gun, bullet.bulletNumber, hitEntry.position, hitEntry.side, HitType.ARMOR);
+                        }
+                        displayXRayAnalysis(xrayTargetEntity, bullet, xrayStartPosition, hitEntry.position, ResultType.ARMOR_STOP, xrayEvents, xrayFragments);
                         return EntityBullet.HitType.ARMOR;
                     }
                 } else {
@@ -422,14 +525,14 @@ public abstract class AEntityF_Multipart<JSONDefinition extends AJSONPartProvide
                         if (removeAfterDamage) {
                             InterfaceManager.packetInterface.sendToServer(new PacketEntityBulletHitGeneric(bullet.gun, bullet.bulletNumber, hitEntry.position, hitEntry.side, HitType.VEHICLE));
                             bullet.waitingOnActionPacket = true;
-                            displayXRayAnalysis(xrayTargetEntity, bullet, xrayStartPosition, hitEntry.position, ResultType.VEHICLE_STOP, xrayEvents);
+                            displayXRayAnalysis(xrayTargetEntity, bullet, xrayStartPosition, hitEntry.position, ResultType.VEHICLE_STOP, xrayEvents, xrayFragments);
                             return EntityBullet.HitType.VEHICLE;
                         }
                     } else {
                         EntityBullet.performEntityHitLogic(hitEntity, damage);
                         if (removeAfterDamage) {
                             EntityBullet.performGenericHitLogic(bullet.gun, bullet.bulletNumber, hitEntry.position, hitEntry.side, HitType.VEHICLE);
-                            displayXRayAnalysis(xrayTargetEntity, bullet, xrayStartPosition, hitEntry.position, ResultType.VEHICLE_STOP, xrayEvents);
+                            displayXRayAnalysis(xrayTargetEntity, bullet, xrayStartPosition, hitEntry.position, ResultType.VEHICLE_STOP, xrayEvents, xrayFragments);
                             return EntityBullet.HitType.VEHICLE;
                         }
                     }
@@ -442,9 +545,15 @@ public abstract class AEntityF_Multipart<JSONDefinition extends AJSONPartProvide
             }
         }
         if (bullet != null && !xrayEvents.isEmpty()) {
-            displayXRayAnalysis(xrayTargetEntity, bullet, xrayStartPosition, bullet.position.copy().add(bullet.motion), ResultType.PENETRATED, xrayEvents);
+            displayXRayAnalysis(xrayTargetEntity, bullet, xrayStartPosition, bullet.position.copy().add(bullet.motion), ResultType.PENETRATED, xrayEvents, xrayFragments);
         }
         return null;
+    }
+
+    private void recordXRayFragment(List<FragmentEvent> xrayFragments, Point3D startPosition, Point3D endPosition) {
+        if (xrayFragments != null && xrayFragments.size() < DamageXRaySystem.MAX_FRAGMENT_EVENTS) {
+            xrayFragments.add(new FragmentEvent(startPosition, endPosition));
+        }
     }
 
     private void recordXRayEvent(List<HitEvent> xrayEvents, AEntityF_Multipart<?> hitEntity, BoundingBoxHitResult hitEntry, double armorThickness, double penetrationPotential, double armorPenetrated, double collisionDamage, double entityDamage, boolean stopped, boolean forwardedDamage) {
@@ -458,7 +567,7 @@ public abstract class AEntityF_Multipart<JSONDefinition extends AJSONPartProvide
         }
     }
 
-    private void displayXRayAnalysis(AEntityE_Interactable<?> targetEntity, EntityBullet bullet, Point3D startPosition, Point3D endPosition, ResultType resultType, List<HitEvent> xrayEvents) {
+    private void displayXRayAnalysis(AEntityE_Interactable<?> targetEntity, EntityBullet bullet, Point3D startPosition, Point3D endPosition, ResultType resultType, List<HitEvent> xrayEvents, List<FragmentEvent> xrayFragments) {
         if (targetEntity != null && bullet != null && xrayEvents != null && !xrayEvents.isEmpty()) {
             String bulletName = bullet.gun.lastLoadedBullet != null ? bullet.gun.lastLoadedBullet.getItemName() : bullet.definition.systemName;
             String targetName = getXRayEntityName(targetEntity);
@@ -471,9 +580,9 @@ public abstract class AEntityF_Multipart<JSONDefinition extends AJSONPartProvide
                 displayStartPosition.subtract(flightDirection.scale(leadDistance));
             }
             if (world.isClient()) {
-                DamageXRaySystem.displayAnalysis(targetEntity, bullet.gun.uniqueUUID, bullet.bulletNumber, bulletName, targetName, bulletModelLocation, bulletTextureLocation, displayStartPosition, endPosition, resultType, xrayEvents);
+                DamageXRaySystem.displayAnalysis(targetEntity, bullet.gun.uniqueUUID, bullet.bulletNumber, bulletName, targetName, bulletModelLocation, bulletTextureLocation, displayStartPosition, endPosition, resultType, xrayEvents, xrayFragments);
             } else {
-                InterfaceManager.packetInterface.sendToAllClients(new PacketEntityBulletHitXRay(targetEntity, bullet.gun.uniqueUUID, bullet.bulletNumber, bulletName, targetName, bulletModelLocation, bulletTextureLocation, displayStartPosition, endPosition, resultType, xrayEvents));
+                InterfaceManager.packetInterface.sendToAllClients(new PacketEntityBulletHitXRay(targetEntity, bullet.gun.uniqueUUID, bullet.bulletNumber, bulletName, targetName, bulletModelLocation, bulletTextureLocation, displayStartPosition, endPosition, resultType, xrayEvents, xrayFragments));
             }
         }
     }

@@ -19,6 +19,7 @@ import minecrafttransportsimulator.rendering.RenderableVertices;
  */
 public class DamageXRaySystem {
     public static final int MAX_EVENTS = 12;
+    public static final int MAX_FRAGMENT_EVENTS = 48;
     public static final String XRAY_SOLID_TEXTURE = "mts:textures/rendering/light.png";
     public static final ColorRGB XRAY_HULL_COLOR = ColorRGB.BLACK;
     public static final ColorRGB XRAY_DETAIL_COLOR = new ColorRGB(110, 220, 255);
@@ -40,14 +41,14 @@ public class DamageXRaySystem {
     private static final Point3D projectionPoint = new Point3D();
     private static final Map<RenderableData, RenderableData> projectedRenderables = new IdentityHashMap<>();
 
-    public static void displayAnalysis(AEntityE_Interactable<?> targetEntity, UUID gunID, int bulletNumber, String bulletName, String targetName, String bulletModelLocation, String bulletTextureLocation, Point3D startPosition, Point3D endPosition, ResultType resultType, List<HitEvent> hitEvents) {
+    public static void displayAnalysis(AEntityE_Interactable<?> targetEntity, UUID gunID, int bulletNumber, String bulletName, String targetName, String bulletModelLocation, String bulletTextureLocation, Point3D startPosition, Point3D endPosition, ResultType resultType, List<HitEvent> hitEvents, List<FragmentEvent> fragmentEvents) {
         if (InterfaceManager.clientInterface == null || targetEntity == null || !targetEntity.world.isClient() || hitEvents == null || hitEvents.isEmpty()) {
             return;
         }
         if (activeAnalysis != null && activeAnalysis.matches(gunID, bulletNumber, targetEntity.uniqueUUID) && !activeAnalysis.isExpired()) {
             return;
         }
-        activeAnalysis = new Analysis(targetEntity, gunID, bulletNumber, bulletName, targetName, bulletModelLocation, bulletTextureLocation, startPosition, endPosition, resultType, hitEvents);
+        activeAnalysis = new Analysis(targetEntity, gunID, bulletNumber, bulletName, targetName, bulletModelLocation, bulletTextureLocation, startPosition, endPosition, resultType, hitEvents, fragmentEvents);
     }
 
     public static Analysis getActiveAnalysis() {
@@ -212,6 +213,17 @@ public class DamageXRaySystem {
         }
     }
 
+    public static class FragmentEvent {
+        public final Point3D startPosition;
+        public final Point3D endPosition;
+        public double pathProgress;
+
+        public FragmentEvent(Point3D startPosition, Point3D endPosition) {
+            this.startPosition = startPosition.copy();
+            this.endPosition = endPosition.copy();
+        }
+    }
+
     public static class Analysis {
         public final AEntityE_Interactable<?> targetEntity;
         public final UUID targetID;
@@ -225,11 +237,12 @@ public class DamageXRaySystem {
         public final Point3D endPosition;
         public final ResultType resultType;
         public final List<HitEvent> hitEvents;
+        public final List<FragmentEvent> fragmentEvents;
         public final double impactProgress;
         private final double cameraTurnSide;
         private final long createdTime;
 
-        private Analysis(AEntityE_Interactable<?> targetEntity, UUID gunID, int bulletNumber, String bulletName, String targetName, String bulletModelLocation, String bulletTextureLocation, Point3D startPosition, Point3D endPosition, ResultType resultType, List<HitEvent> hitEvents) {
+        private Analysis(AEntityE_Interactable<?> targetEntity, UUID gunID, int bulletNumber, String bulletName, String targetName, String bulletModelLocation, String bulletTextureLocation, Point3D startPosition, Point3D endPosition, ResultType resultType, List<HitEvent> hitEvents, List<FragmentEvent> fragmentEvents) {
             this.targetEntity = targetEntity;
             this.targetID = targetEntity.uniqueUUID;
             this.gunID = gunID;
@@ -242,11 +255,19 @@ public class DamageXRaySystem {
             this.endPosition = endPosition.copy();
             this.resultType = resultType;
             this.hitEvents = new ArrayList<>();
+            this.fragmentEvents = new ArrayList<>();
             double totalDistance = Math.max(this.startPosition.distanceTo(this.endPosition), 0.001D);
             for (int i = 0; i < hitEvents.size() && i < MAX_EVENTS; ++i) {
                 HitEvent event = hitEvents.get(i);
                 event.pathProgress = Math.max(0, Math.min(1, this.startPosition.distanceTo(event.hitPosition) / totalDistance));
                 this.hitEvents.add(event);
+            }
+            if (fragmentEvents != null) {
+                for (int i = 0; i < fragmentEvents.size() && i < MAX_FRAGMENT_EVENTS; ++i) {
+                    FragmentEvent event = fragmentEvents.get(i);
+                    event.pathProgress = Math.max(0, Math.min(1, this.startPosition.distanceTo(event.startPosition) / totalDistance));
+                    this.fragmentEvents.add(event);
+                }
             }
             this.impactProgress = this.hitEvents.isEmpty() ? 1.0D : this.hitEvents.get(0).pathProgress;
             Point3D localHitOffset = (this.hitEvents.isEmpty() ? this.endPosition.copy() : this.hitEvents.get(0).hitPosition.copy()).subtract(targetEntity.position).reOrigin(targetEntity.orientation);
@@ -283,6 +304,11 @@ public class DamageXRaySystem {
         public float getHitMarkerProgress(HitEvent event) {
             long markerAge = System.currentTimeMillis() - (createdTime + (long) (PLAYBACK_DURATION_MS * event.pathProgress));
             return markerAge >= 0 ? Math.min(1.0F, markerAge / 650.0F) : -1.0F;
+        }
+
+        public float getFragmentProgress(FragmentEvent event) {
+            float fragmentProgress = (getPlaybackProgress() - (float) event.pathProgress) / 0.20F;
+            return Math.max(0.0F, Math.min(1.0F, fragmentProgress));
         }
 
         public float getAlpha() {

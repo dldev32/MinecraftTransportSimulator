@@ -12,6 +12,7 @@ import minecrafttransportsimulator.rendering.RenderableData.LightingMode;
 import minecrafttransportsimulator.rendering.RenderableVertices;
 import minecrafttransportsimulator.systems.DamageXRaySystem;
 import minecrafttransportsimulator.systems.DamageXRaySystem.Analysis;
+import minecrafttransportsimulator.systems.DamageXRaySystem.FragmentEvent;
 import minecrafttransportsimulator.systems.DamageXRaySystem.HitEvent;
 
 /**
@@ -23,16 +24,21 @@ public class GUIComponentDamageXRay extends AGUIComponent {
     private static final int HIT_MARKER_SEGMENTS = 28;
     private static final int FLOATS_PER_VERTEX = 8;
     private static final ColorRGB LINE_COLOR = new ColorRGB(106, 220, 255);
+    private static final ColorRGB FRAGMENT_COLOR = new ColorRGB(255, 174, 74);
     private static final ColorRGB TEXT_COLOR = new ColorRGB(225, 248, 255);
     private static final ColorRGB ALERT_COLOR = new ColorRGB(255, 126, 104);
 
     private final RenderableData lineRenderable;
+    private final RenderableData fragmentRenderable;
     private final RenderableData hitMarkerRenderable;
     private final Point3D textHelper = new Point3D();
     private final Point3D pathStart = new Point3D();
     private final Point3D pathEnd = new Point3D();
     private final Point3D currentProjectile = new Point3D();
     private final Point3D currentProjectileWorld = new Point3D();
+    private final Point3D fragmentStart = new Point3D();
+    private final Point3D fragmentEnd = new Point3D();
+    private final Point3D currentFragmentEnd = new Point3D();
     private final Point3D projectedPoint = new Point3D();
     private final Point3D targetPosition = new Point3D();
     private final Point3D focusPosition = new Point3D();
@@ -45,6 +51,10 @@ public class GUIComponentDamageXRay extends AGUIComponent {
         lineRenderable.setColor(LINE_COLOR);
         lineRenderable.setAlpha(0.95F);
         lineRenderable.setLightMode(LightingMode.IGNORE_ALL_LIGHTING);
+        fragmentRenderable = new RenderableData(new RenderableVertices(DamageXRaySystem.MAX_FRAGMENT_EVENTS), null);
+        fragmentRenderable.setColor(FRAGMENT_COLOR);
+        fragmentRenderable.setAlpha(0.72F);
+        fragmentRenderable.setLightMode(LightingMode.IGNORE_ALL_LIGHTING);
         hitMarkerRenderable = new RenderableData(new RenderableVertices("XRAY_HIT_MARKERS", FloatBuffer.allocate(DamageXRaySystem.MAX_EVENTS * HIT_MARKER_SEGMENTS * 3 * FLOATS_PER_VERTEX), false), DamageXRaySystem.XRAY_SOLID_TEXTURE);
         hitMarkerRenderable.setColor(ALERT_COLOR);
         hitMarkerRenderable.setAlpha(0.48F);
@@ -80,10 +90,13 @@ public class GUIComponentDamageXRay extends AGUIComponent {
 
     private void renderTrace(Analysis analysis, float alpha, float partialTicks) {
         FloatBuffer vertices = lineRenderable.vertexObject.vertices;
+        FloatBuffer fragmentVertices = fragmentRenderable.vertexObject.vertices;
         FloatBuffer hitMarkerVertices = hitMarkerRenderable.vertexObject.vertices;
         vertices.clear();
+        fragmentVertices.clear();
         hitMarkerVertices.clear();
         int linesUsed = 0;
+        int fragmentLinesUsed = 0;
         setViewRotation(analysis, viewRotation, flightVector);
         setProjectileFocus(analysis, partialTicks, targetPosition, focusPosition);
 
@@ -99,6 +112,17 @@ public class GUIComponentDamageXRay extends AGUIComponent {
         projectPathPoint(analysis, currentProjectileWorld, partialTicks, width, height, viewRotation, targetPosition, focusPosition, currentProjectile);
         linesUsed = addLine(vertices, linesUsed, (float) pathStart.x, (float) pathStart.y, (float) currentProjectile.x, (float) currentProjectile.y);
 
+        for (FragmentEvent event : analysis.fragmentEvents) {
+            float fragmentProgress = analysis.getFragmentProgress(event);
+            if (fragmentProgress <= 0.0F) {
+                continue;
+            }
+            projectPathPoint(analysis, event.startPosition, partialTicks, width, height, viewRotation, targetPosition, focusPosition, fragmentStart);
+            currentFragmentEnd.set(event.startPosition).interpolate(event.endPosition, fragmentProgress);
+            projectPathPoint(analysis, currentFragmentEnd, partialTicks, width, height, viewRotation, targetPosition, focusPosition, fragmentEnd);
+            fragmentLinesUsed = addLine(fragmentVertices, fragmentLinesUsed, (float) fragmentStart.x, (float) fragmentStart.y, (float) fragmentEnd.x, (float) fragmentEnd.y);
+        }
+
         for (HitEvent event : analysis.hitEvents) {
             if (event.pathProgress > playbackProgress + 0.02F) {
                 continue;
@@ -113,12 +137,19 @@ public class GUIComponentDamageXRay extends AGUIComponent {
         while (linesUsed < MAX_LINES) {
             linesUsed = addLine(vertices, linesUsed, 0, 0, 0, 0);
         }
+        while (fragmentLinesUsed < DamageXRaySystem.MAX_FRAGMENT_EVENTS) {
+            fragmentLinesUsed = addLine(fragmentVertices, fragmentLinesUsed, 0, 0, 0, 0);
+        }
         vertices.flip();
+        fragmentVertices.flip();
         hitMarkerVertices.flip();
 
         lineRenderable.transform.setTranslation(position.x, position.y, MODEL_DEFAULT_ZOFFSET + 30);
         lineRenderable.setAlpha(0.95F * alpha);
         lineRenderable.render();
+        fragmentRenderable.transform.setTranslation(position.x, position.y, MODEL_DEFAULT_ZOFFSET + 34);
+        fragmentRenderable.setAlpha(0.72F * alpha);
+        fragmentRenderable.render();
         hitMarkerRenderable.transform.setTranslation(position.x, position.y, MODEL_DEFAULT_ZOFFSET + 42);
         hitMarkerRenderable.setAlpha(0.48F * alpha);
         hitMarkerRenderable.render();
