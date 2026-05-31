@@ -34,6 +34,7 @@ public class GUIConfig extends AGUIBase {
     private static final float DEFAULT_GUI_SCALE = 1.0F / 1.2F;
     private static final int BASE_CONFIG_GUI_WIDTH = 512;
     private static final int BASE_CONFIG_GUI_HEIGHT = 376;
+    private static final int BASE_HEADER_HEIGHT = 34;
     private static final int BASE_TAB_HEIGHT = 20;
     private static final int BASE_TAB_GAP = 2;
     private static final int FIT_MARGIN = 8;
@@ -45,21 +46,22 @@ public class GUIConfig extends AGUIBase {
     private float guiScale = DEFAULT_GUI_SCALE;
     private int CONFIG_GUI_WIDTH = scale(BASE_CONFIG_GUI_WIDTH);
     private int CONFIG_GUI_HEIGHT = scale(BASE_CONFIG_GUI_HEIGHT);
+    private int HEADER_HEIGHT = scale(BASE_HEADER_HEIGHT);
     private int TAB_HEIGHT = scale(BASE_TAB_HEIGHT);
     private int TAB_GAP = scale(BASE_TAB_GAP);
     private int TAB_WIDTH = (CONFIG_GUI_WIDTH - TAB_GAP * 3) / 4;
-    private int CONTENT_TOP = scale(32);
-    private int CONTENT_BOTTOM = CONFIG_GUI_HEIGHT - scale(14);
-    private int LEFT_NAV_X = scale(16);
+    private int CONTENT_TOP = scale(48);
+    private int CONTENT_BOTTOM = CONFIG_GUI_HEIGHT - scale(18);
+    private int LEFT_NAV_X = scale(0);
     private int LEFT_NAV_Y = scale(48);
-    private int LEFT_NAV_WIDTH = scale(96);
-    private int LEFT_NAV_BUTTON_HEIGHT = scale(18);
-    private int LEFT_NAV_SPACING = scale(23);
+    private int LEFT_NAV_WIDTH = scale(128);
+    private int LEFT_NAV_BUTTON_HEIGHT = scale(22);
+    private int LEFT_NAV_SPACING = scale(26);
     private int DIVIDER_X = scale(128);
     private int LIST_X_WITH_NAV = scale(146);
-    private int LIST_X_FULL = scale(24);
+    private int LIST_X_FULL = scale(146);
     private int LIST_WIDTH_WITH_NAV = scale(338);
-    private int LIST_WIDTH_FULL = scale(460);
+    private int LIST_WIDTH_FULL = scale(338);
     private int ROW_HEIGHT = scale(18);
     private int SETTING_ROWS_WITH_NAV = 17;
     private int SETTING_ROWS_FULL = 17;
@@ -88,20 +90,26 @@ public class GUIConfig extends AGUIBase {
         return -y - Math.max(0, height - localScale(12)) / 2F;
     }
 
-    private static final float PANEL_ALPHA = 0.60F;
-    private static final float BUTTON_ALPHA = 0.60F;
-    private static final ColorRGB COLOR_PANEL = new ColorRGB(0, 0, 0);
-    private static final ColorRGB COLOR_BUTTON = new ColorRGB(0, 0, 0);
-    private static final ColorRGB COLOR_BUTTON_HOVER = new ColorRGB(48, 48, 48);
-    private static final ColorRGB COLOR_BUTTON_ACTIVE = new ColorRGB(22, 22, 22);
+    private static final float PANEL_ALPHA = 1.0F;
+    private static final float HEADER_ALPHA = 1.0F;
+    private static final float BUTTON_ALPHA = 1.0F;
+    private static final float ROW_ALPHA = 1.0F;
+    private static final ColorRGB COLOR_PANEL = new ColorRGB(21, 20, 25);
+    private static final ColorRGB COLOR_PANEL_HEADER = new ColorRGB(29, 28, 34);
+    private static final ColorRGB COLOR_SIDEBAR = new ColorRGB(27, 26, 32);
+    private static final ColorRGB COLOR_BUTTON = new ColorRGB(42, 42, 54);
+    private static final ColorRGB COLOR_BUTTON_HOVER = new ColorRGB(54, 55, 70);
+    private static final ColorRGB COLOR_BUTTON_ACTIVE = new ColorRGB(43, 58, 46);
+    private static final ColorRGB COLOR_ACCENT = new ColorRGB(0, 230, 255);
+    private static final ColorRGB COLOR_CELL = new ColorRGB(31, 31, 41);
     private static final ColorRGB COLOR_TEXT = ColorRGB.WHITE;
-    private static final ColorRGB COLOR_DIM_TEXT = new ColorRGB(165, 165, 165);
+    private static final ColorRGB COLOR_DIM_TEXT = new ColorRGB(178, 178, 188);
     private static final ColorRGB COLOR_CHANGED = ColorRGB.YELLOW;
-    private static final ColorRGB COLOR_DIVIDER = ColorRGB.WHITE;
-    private static final ColorRGB COLOR_OUTLINE = ColorRGB.WHITE;
-    private static final ColorRGB COLOR_ROW_ALT = new ColorRGB(0, 0, 0);
-    private static final ColorRGB COLOR_SCROLL_TRACK = new ColorRGB(90, 90, 90);
-    private static final ColorRGB COLOR_SCROLL_THUMB = new ColorRGB(210, 210, 210);
+    private static final ColorRGB COLOR_DIVIDER = new ColorRGB(56, 57, 72);
+    private static final ColorRGB COLOR_OUTLINE = new ColorRGB(52, 55, 64);
+    private static final ColorRGB COLOR_ROW_ALT = new ColorRGB(31, 31, 41);
+    private static final ColorRGB COLOR_SCROLL_TRACK = new ColorRGB(38, 39, 50);
+    private static final ColorRGB COLOR_SCROLL_THUMB = new ColorRGB(196, 198, 207);
 
     private final Map<MainPage, FlatButton> pageButtons = new LinkedHashMap<>();
     private final Map<CommonPage, TextButton> commonButtons = new LinkedHashMap<>();
@@ -138,7 +146,13 @@ public class GUIConfig extends AGUIBase {
     private int joystickAssignmentScroll;
 
     private SolidRect mainPanel;
+    private SolidRect headerPanel;
+    private SolidRect sidebarPanel;
     private SolidRect sideDivider;
+    private SolidRect settingsPanelRightOutline;
+    private SolidRect settingsPanelBottomOutline;
+    private TextLabel titleLabel;
+    private TextButton closeButton;
     private SolidRect pageScrollTrack;
     private SolidRect pageScrollThumb;
     private TextLabel noResultsLabel;
@@ -191,7 +205,7 @@ public class GUIConfig extends AGUIBase {
         this.screenWidth = screenWidth;
         this.screenHeight = screenHeight;
         this.guiLeft = (screenWidth - getWidth()) / 2;
-        this.guiTop = (screenHeight - getHeight() - TAB_HEIGHT - TAB_GAP) / 2 + TAB_HEIGHT + TAB_GAP;
+        this.guiTop = (screenHeight - getHeight()) / 2;
         setupComponents();
     }
 
@@ -199,8 +213,19 @@ public class GUIConfig extends AGUIBase {
     public void setupComponents() {
         components.clear();
         clearLayoutCollections();
-        addComponent(mainPanel = new SolidRect(guiLeft, guiTop, CONFIG_GUI_WIDTH, CONFIG_GUI_HEIGHT, COLOR_PANEL, PANEL_ALPHA, 0.7F));
-        addComponent(sideDivider = new SolidRect(guiLeft + DIVIDER_X, guiTop + CONTENT_TOP, 1, CONTENT_BOTTOM - CONTENT_TOP, COLOR_DIVIDER, 1.0F));
+        addComponent(mainPanel = new SolidRect(guiLeft, guiTop, CONFIG_GUI_WIDTH, CONFIG_GUI_HEIGHT, COLOR_PANEL, PANEL_ALPHA, 1.0F));
+        addComponent(headerPanel = new SolidRect(guiLeft, guiTop, CONFIG_GUI_WIDTH, HEADER_HEIGHT, COLOR_PANEL_HEADER, HEADER_ALPHA));
+        addComponent(sidebarPanel = new SolidRect(guiLeft, guiTop + HEADER_HEIGHT, DIVIDER_X, CONFIG_GUI_HEIGHT - HEADER_HEIGHT, COLOR_SIDEBAR, PANEL_ALPHA));
+        addComponent(sideDivider = new SolidRect(guiLeft + DIVIDER_X, guiTop + HEADER_HEIGHT, localScale(1), CONFIG_GUI_HEIGHT - HEADER_HEIGHT, COLOR_DIVIDER, 1.0F));
+        addComponent(settingsPanelRightOutline = new SolidRect(guiLeft + CONFIG_GUI_WIDTH - localScale(1), guiTop + HEADER_HEIGHT, localScale(1), CONFIG_GUI_HEIGHT - HEADER_HEIGHT, COLOR_OUTLINE, 1.0F));
+        addComponent(settingsPanelBottomOutline = new SolidRect(guiLeft + DIVIDER_X, guiTop + CONFIG_GUI_HEIGHT - localScale(1), CONFIG_GUI_WIDTH - DIVIDER_X, localScale(1), COLOR_OUTLINE, 1.0F));
+        addComponent(titleLabel = new TextLabel(guiLeft + localScale(10), guiTop + localScale(10), DIVIDER_X - localScale(20), localScale(14), LanguageSystem.GUI_CONFIG_TITLE.getCurrentValue(), COLOR_TEXT, TextAlignment.LEFT_ALIGNED, 0.9F));
+        addComponent(closeButton = new TextButton(guiLeft + CONFIG_GUI_WIDTH - localScale(24), guiTop + localScale(8), localScale(14), localScale(14), "X") {
+            @Override
+            public void onClicked(boolean leftSide) {
+                close();
+            }
+        });
         addSettingRowBackgrounds();
         addPageButtons();
         addSubPageButtons();
@@ -213,27 +238,28 @@ public class GUIConfig extends AGUIBase {
 
     private void updateScaledLayout(int screenWidth, int screenHeight) {
         float widthFillScale = screenWidth * MAX_SCREEN_WIDTH_FILL / BASE_CONFIG_GUI_WIDTH;
-        float heightFillScale = screenHeight * MAX_SCREEN_HEIGHT_FILL / (BASE_CONFIG_GUI_HEIGHT + BASE_TAB_HEIGHT + BASE_TAB_GAP);
+        float heightFillScale = screenHeight * MAX_SCREEN_HEIGHT_FILL / BASE_CONFIG_GUI_HEIGHT;
         float widthFitScale = (screenWidth - FIT_MARGIN * 2) / (float) BASE_CONFIG_GUI_WIDTH;
-        float heightFitScale = (screenHeight - FIT_MARGIN * 2) / (float) (BASE_CONFIG_GUI_HEIGHT + BASE_TAB_HEIGHT + BASE_TAB_GAP);
+        float heightFitScale = (screenHeight - FIT_MARGIN * 2) / (float) BASE_CONFIG_GUI_HEIGHT;
         guiScale = Math.max(0.05F, Math.min(DEFAULT_GUI_SCALE, Math.min(Math.min(widthFillScale, heightFillScale), Math.min(widthFitScale, heightFitScale))));
         CONFIG_GUI_WIDTH = scale(BASE_CONFIG_GUI_WIDTH);
         CONFIG_GUI_HEIGHT = scale(BASE_CONFIG_GUI_HEIGHT);
+        HEADER_HEIGHT = scale(BASE_HEADER_HEIGHT);
         TAB_HEIGHT = scale(BASE_TAB_HEIGHT);
         TAB_GAP = scale(BASE_TAB_GAP);
         TAB_WIDTH = (CONFIG_GUI_WIDTH - TAB_GAP * 3) / 4;
-        CONTENT_TOP = scale(32);
-        CONTENT_BOTTOM = CONFIG_GUI_HEIGHT - scale(14);
-        LEFT_NAV_X = scale(16);
+        CONTENT_TOP = scale(48);
+        CONTENT_BOTTOM = CONFIG_GUI_HEIGHT - scale(18);
+        LEFT_NAV_X = scale(0);
         LEFT_NAV_Y = scale(48);
-        LEFT_NAV_WIDTH = scale(96);
-        LEFT_NAV_BUTTON_HEIGHT = scale(18);
-        LEFT_NAV_SPACING = scale(23);
+        LEFT_NAV_BUTTON_HEIGHT = scale(22);
+        LEFT_NAV_SPACING = scale(26);
         DIVIDER_X = scale(128);
+        LEFT_NAV_WIDTH = DIVIDER_X - localScale(1);
         LIST_X_WITH_NAV = scale(146);
-        LIST_X_FULL = scale(24);
+        LIST_X_FULL = scale(146);
         LIST_WIDTH_WITH_NAV = scale(338);
-        LIST_WIDTH_FULL = scale(460);
+        LIST_WIDTH_FULL = scale(338);
         ROW_HEIGHT = scale(18);
         SETTING_ROWS_WITH_NAV = 17;
         SETTING_ROWS_FULL = 17;
@@ -265,12 +291,6 @@ public class GUIConfig extends AGUIBase {
     }
 
     private void addSettingRowBackgrounds() {
-        for (int i = 0; i < SETTING_ROWS_FULL; ++i) {
-            SolidRect background = new SolidRect(guiLeft + LIST_X_FULL, guiTop + CONTENT_TOP, LIST_WIDTH_FULL, ROW_HEIGHT - 2, COLOR_ROW_ALT, 0.35F);
-            background.visible = false;
-            settingRowBackgrounds.add(background);
-            addComponent(background);
-        }
     }
 
     @Override
@@ -287,7 +307,7 @@ public class GUIConfig extends AGUIBase {
         if (activePage == MainPage.COMMON) {
             updateCommonPage(wheelMovement);
         } else if (activePage == MainPage.RENDERING) {
-            updateSettingList(renderingSettingRows, getAndSetRenderingScroll(wheelMovement, renderingSettingRows.size()), SETTING_ROWS_FULL, LIST_X_FULL, CONTENT_TOP + 10, LIST_WIDTH_FULL);
+            updateSettingList(renderingSettingRows, getAndSetRenderingScroll(wheelMovement, renderingSettingRows.size()), SETTING_ROWS_FULL, LIST_X_FULL, getListTop(SETTING_ROWS_FULL), LIST_WIDTH_FULL);
         } else if (activePage == MainPage.CONTROLS) {
             updateControlsPage(wheelMovement);
         } else if (activePage == MainPage.DEVELOPMENT) {
@@ -336,7 +356,7 @@ public class GUIConfig extends AGUIBase {
         int index = 0;
         for (MainPage page : MainPage.values()) {
             final MainPage pageForButton = page;
-            FlatButton button = new FlatButton(guiLeft + (TAB_WIDTH + TAB_GAP) * index, guiTop - TAB_HEIGHT - TAB_GAP, TAB_WIDTH, TAB_HEIGHT, page.title.getCurrentValue(), true) {
+            FlatButton button = new FlatButton(guiLeft + LEFT_NAV_X, guiTop + LEFT_NAV_Y + LEFT_NAV_SPACING * index, LEFT_NAV_WIDTH, LEFT_NAV_BUTTON_HEIGHT, page.title.getCurrentValue(), true) {
                 @Override
                 public void onClicked(boolean leftSide) {
                     if (pageForButton != MainPage.DEVELOPMENT || !isDevelopmentLocked()) {
@@ -354,9 +374,10 @@ public class GUIConfig extends AGUIBase {
 
     private void addSubPageButtons() {
         int index = 0;
+        int subNavY = LEFT_NAV_Y + LEFT_NAV_SPACING * (MainPage.values().length + 1);
         for (CommonPage page : CommonPage.values()) {
             final CommonPage pageForButton = page;
-            TextButton button = new TextButton(guiLeft + LEFT_NAV_X, guiTop + LEFT_NAV_Y + LEFT_NAV_SPACING * index, LEFT_NAV_WIDTH, LEFT_NAV_BUTTON_HEIGHT, page.title.getCurrentValue(), true) {
+            TextButton button = new TextButton(guiLeft + LEFT_NAV_X, guiTop + subNavY + LEFT_NAV_SPACING * index, LEFT_NAV_WIDTH, LEFT_NAV_BUTTON_HEIGHT, page.title.getCurrentValue(), true) {
                 @Override
                 public void onClicked(boolean leftSide) {
                     activeCommonPage = pageForButton;
@@ -371,7 +392,7 @@ public class GUIConfig extends AGUIBase {
         index = 0;
         for (ControlsPage page : ControlsPage.values()) {
             final ControlsPage pageForButton = page;
-            TextButton button = new TextButton(guiLeft + LEFT_NAV_X, guiTop + LEFT_NAV_Y + LEFT_NAV_SPACING * index, LEFT_NAV_WIDTH, LEFT_NAV_BUTTON_HEIGHT, page.title.getCurrentValue(), true) {
+            TextButton button = new TextButton(guiLeft + LEFT_NAV_X, guiTop + subNavY + LEFT_NAV_SPACING * index, LEFT_NAV_WIDTH, LEFT_NAV_BUTTON_HEIGHT, page.title.getCurrentValue(), true) {
                 @Override
                 public void onClicked(boolean leftSide) {
                     activeControlsPage = pageForButton;
@@ -387,7 +408,7 @@ public class GUIConfig extends AGUIBase {
 
     private void addScrollComponents() {
         addComponent(pageScrollTrack = new SolidRect(guiLeft + SCROLL_X, guiTop + CONTENT_TOP, SCROLL_TRACK_WIDTH, SCROLL_THUMB_MIN_HEIGHT, COLOR_PANEL, 0.0F));
-        addComponent(pageScrollThumb = new SolidRect(guiLeft + SCROLL_X - 2, guiTop + CONTENT_TOP, SCROLL_THUMB_WIDTH, SCROLL_THUMB_MIN_HEIGHT, COLOR_SCROLL_THUMB, 0.9F) {
+        addComponent(pageScrollThumb = new SolidRect(guiLeft + SCROLL_X - 2, guiTop + CONTENT_TOP, SCROLL_THUMB_WIDTH, SCROLL_THUMB_MIN_HEIGHT, COLOR_SCROLL_THUMB, 1.0F) {
             @Override
             public void render(AGUIBase gui, int mouseX, int mouseY, boolean renderBright, boolean renderLitTexture, boolean blendingEnabled, float partialTicks) {
                 if (!blendingEnabled && scrollbarDragging) {
@@ -596,10 +617,10 @@ public class GUIConfig extends AGUIBase {
             };
             joystickComponentButtons.add(componentButton);
             addComponent(componentButton);
-            SolidRect stateBack = new SolidRect(guiLeft + LIST_X_WITH_NAV + localScale(150), guiTop + CONTENT_TOP + localScale(48) + ROW_HEIGHT * i, localScale(50), localScale(8), COLOR_SCROLL_TRACK, 0.75F);
+            SolidRect stateBack = new SolidRect(guiLeft + LIST_X_WITH_NAV + localScale(150), guiTop + CONTENT_TOP + localScale(48) + ROW_HEIGHT * i, localScale(50), localScale(8), COLOR_SCROLL_TRACK, 1.0F);
             joystickStateBacks.add(stateBack);
             addComponent(stateBack);
-            SolidRect stateFill = new SolidRect(guiLeft + LIST_X_WITH_NAV + localScale(175), guiTop + CONTENT_TOP + localScale(48) + ROW_HEIGHT * i, localScale(1), localScale(8), COLOR_CHANGED, 0.9F);
+            SolidRect stateFill = new SolidRect(guiLeft + LIST_X_WITH_NAV + localScale(175), guiTop + CONTENT_TOP + localScale(48) + ROW_HEIGHT * i, localScale(1), localScale(8), COLOR_CHANGED, 1.0F);
             joystickStateFills.add(stateFill);
             addComponent(stateFill);
             TextLabel assignmentLabel = new TextLabel(guiLeft + LIST_X_WITH_NAV + localScale(216), guiTop + CONTENT_TOP + localScale(45) + ROW_HEIGHT * i, localScale(116), rowControlHeight, "", COLOR_TEXT, TextAlignment.LEFT_ALIGNED, 0.75F);
@@ -664,6 +685,7 @@ public class GUIConfig extends AGUIBase {
     }
 
     private void updateNavigation() {
+        titleLabel.text = LanguageSystem.GUI_CONFIG_TITLE.getCurrentValue();
         for (MainPage page : pageButtons.keySet()) {
             FlatButton button = pageButtons.get(page);
             boolean locked = page == MainPage.DEVELOPMENT && isDevelopmentLocked();
@@ -673,7 +695,7 @@ public class GUIConfig extends AGUIBase {
             button.active = page == activePage;
             button.text = page.title.getCurrentValue();
         }
-        sideDivider.visible = activePage == MainPage.COMMON || activePage == MainPage.CONTROLS;
+        sideDivider.visible = true;
         boolean serverSettingsLocked = isServerSettingsLocked();
         if (activeCommonPage == CommonPage.SERVER && serverSettingsLocked) {
             activeCommonPage = CommonPage.CLIENT;
@@ -684,7 +706,7 @@ public class GUIConfig extends AGUIBase {
             button.visible = activePage == MainPage.COMMON;
             button.enabled = !locked;
             button.active = page == activeCommonPage;
-            button.textColorOverride = COLOR_TEXT;
+            button.textColorOverride = locked ? COLOR_DIM_TEXT : COLOR_TEXT;
             button.text = page.title.getCurrentValue();
         }
         for (ControlsPage page : controlsButtons.keySet()) {
@@ -762,14 +784,15 @@ public class GUIConfig extends AGUIBase {
     }
 
     private void updateCommonPage(int wheelMovement) {
+        int listTop = getListTop(SETTING_ROWS_WITH_NAV);
         if (activeCommonPage == CommonPage.CLIENT) {
             commonClientScroll = adjustScrollForWheel(commonClientScroll, clientSettingRows.size(), SETTING_ROWS_WITH_NAV, wheelMovement);
             commonClientScroll = clampScroll(commonClientScroll, clientSettingRows.size(), SETTING_ROWS_WITH_NAV);
-            updateSettingList(clientSettingRows, commonClientScroll, SETTING_ROWS_WITH_NAV, LIST_X_WITH_NAV, CONTENT_TOP + 10, LIST_WIDTH_WITH_NAV);
+            updateSettingList(clientSettingRows, commonClientScroll, SETTING_ROWS_WITH_NAV, LIST_X_WITH_NAV, listTop, LIST_WIDTH_WITH_NAV);
         } else {
             commonServerScroll = adjustScrollForWheel(commonServerScroll, serverSettingRows.size(), SETTING_ROWS_WITH_NAV, wheelMovement);
             commonServerScroll = clampScroll(commonServerScroll, serverSettingRows.size(), SETTING_ROWS_WITH_NAV);
-            updateSettingList(serverSettingRows, commonServerScroll, SETTING_ROWS_WITH_NAV, LIST_X_WITH_NAV, CONTENT_TOP + 10, LIST_WIDTH_WITH_NAV);
+            updateSettingList(serverSettingRows, commonServerScroll, SETTING_ROWS_WITH_NAV, LIST_X_WITH_NAV, listTop, LIST_WIDTH_WITH_NAV);
         }
     }
 
@@ -782,7 +805,7 @@ public class GUIConfig extends AGUIBase {
         }
         developmentScroll = adjustScrollForWheel(developmentScroll, developmentSettingRows.size(), SETTING_ROWS_FULL, wheelMovement);
         developmentScroll = clampScroll(developmentScroll, developmentSettingRows.size(), SETTING_ROWS_FULL);
-        updateSettingList(developmentSettingRows, developmentScroll, SETTING_ROWS_FULL, LIST_X_FULL, CONTENT_TOP + 10, LIST_WIDTH_FULL);
+        updateSettingList(developmentSettingRows, developmentScroll, SETTING_ROWS_FULL, LIST_X_FULL, getListTop(SETTING_ROWS_FULL), LIST_WIDTH_FULL);
     }
 
     private void updateSettingList(List<SettingRow> rows, int scrollSpot, int rowsToRender, int listX, int listY, int listWidth) {
@@ -826,7 +849,7 @@ public class GUIConfig extends AGUIBase {
     private void updateKeyboardPage(int wheelMovement) {
         keyboardScroll = adjustScrollForWheel(keyboardScroll, keyboardRows.size(), SETTING_ROWS_WITH_NAV, wheelMovement);
         keyboardScroll = clampScroll(keyboardScroll, keyboardRows.size(), SETTING_ROWS_WITH_NAV);
-        updateControlList(keyboardRows, keyboardScroll, SETTING_ROWS_WITH_NAV, LIST_X_WITH_NAV, CONTENT_TOP + 10, LIST_WIDTH_WITH_NAV);
+        updateControlList(keyboardRows, keyboardScroll, SETTING_ROWS_WITH_NAV, LIST_X_WITH_NAV, getListTop(SETTING_ROWS_WITH_NAV), LIST_WIDTH_WITH_NAV);
     }
 
     private void updateJoystickPage(int wheelMovement) {
@@ -960,12 +983,11 @@ public class GUIConfig extends AGUIBase {
     }
 
     private void updateRowBackground(int rowIndex, int sourceIndex, int x, int y, int width) {
-        if (rowIndex < settingRowBackgrounds.size() && (sourceIndex % 2) == 0) {
-            SolidRect background = settingRowBackgrounds.get(rowIndex);
-            int backgroundPadding = localScale(4);
-            background.visible = true;
-            setComponentBounds(background, x - backgroundPadding, y - backgroundPadding, width + backgroundPadding * 2, ROW_HEIGHT);
-        }
+    }
+
+    private int getListTop(int rowsToRender) {
+        int listHeight = rowsToRender * ROW_HEIGHT;
+        return HEADER_HEIGHT + Math.max(0, (CONFIG_GUI_HEIGHT - HEADER_HEIGHT - listHeight) / 2);
     }
 
     private void updateScrollBar(int scrollSpot, int itemCount, int rowsToRender, int rowTop, int rowHeight) {
@@ -1281,7 +1303,8 @@ public class GUIConfig extends AGUIBase {
             component.textPosition.set(component instanceof NumericValueBox ? x + component.width / 2F : x, centeredTextY(y, component.height), component.textPosition.z);
         } else if (component instanceof TextLabel) {
             TextLabel label = (TextLabel) component;
-            component.textPosition.set(label.alignment == TextAlignment.CENTERED ? x + component.width / 2F : x, -y, component.textPosition.z);
+            float textY = component.height <= localScale(20) ? textButtonTextY(y, component.height) : -y;
+            component.textPosition.set(label.alignment == TextAlignment.CENTERED ? x + component.width / 2F : x, textY, component.textPosition.z);
         } else {
             component.textPosition.set(x, -y, component.textPosition.z);
         }
@@ -1391,6 +1414,7 @@ public class GUIConfig extends AGUIBase {
         private final SettingType type;
         private final boolean header;
         private final HoverLabel label;
+        private SolidRect labelBackground;
         private TextButton toggleButton;
         private TextButton minusButton;
         private TextButton plusButton;
@@ -1418,6 +1442,7 @@ public class GUIConfig extends AGUIBase {
             this.metadata = null;
             this.type = type;
             this.header = false;
+            addComponent(labelBackground = new SolidRect(0, 0, 1, 1, COLOR_CELL, ROW_ALPHA));
             addComponent(label = new HoverLabel(0, 0, 160, 14, "", COLOR_TEXT, TextAlignment.LEFT_ALIGNED, 0.85F, tooltipText));
             if (type == SettingType.AIRCRAFT_CONTROL_MODE) {
                 addComponent(modeButton = new TextButton(0, 0, 112, 14, "") {
@@ -1437,6 +1462,7 @@ public class GUIConfig extends AGUIBase {
             this.metadata = metadata;
             this.type = type;
             this.header = false;
+            addComponent(labelBackground = new SolidRect(0, 0, 1, 1, COLOR_CELL, ROW_ALPHA));
             addComponent(label = new HoverLabel(0, 0, 160, 14, "", COLOR_TEXT, TextAlignment.LEFT_ALIGNED, 0.85F, entry.comment));
             if (type == SettingType.BOOLEAN) {
                 addComponent(toggleButton = new TextButton(0, 0, 70, 14, "") {
@@ -1445,6 +1471,7 @@ public class GUIConfig extends AGUIBase {
                         toggleBoolean();
                     }
                 });
+                toggleButton.sliderSwitch = true;
             } else if (type == SettingType.NUMBER) {
                 if (metadata.slider) {
                     addComponent(sliderBar = new SliderBar(0, 0, 72, 14, this));
@@ -1513,6 +1540,7 @@ public class GUIConfig extends AGUIBase {
             if (header) {
                 return;
             }
+            labelBackground.visible = visible;
             if (toggleButton != null) {
                 toggleButton.visible = visible;
             }
@@ -1536,25 +1564,33 @@ public class GUIConfig extends AGUIBase {
                 return;
             }
             int rowControlHeight = localScale(14);
-            int controlRight = x + width - localScale(8);
-            int labelWidth = Math.max(localScale(80), width - localScale(145));
+            int controlCellWidth = localScale(96);
+            int cellGap = localScale(6);
+            int labelWidth = Math.max(localScale(80), width - controlCellWidth - cellGap);
+            int controlCellLeft = x + width - controlCellWidth;
+            int controlCenter = controlCellLeft + controlCellWidth / 2;
+            int backgroundLeftPadding = localScale(2);
+            int backgroundRightPadding = localScale(6);
+            int backgroundPaddingY = localScale(1);
+            setComponentBounds(labelBackground, x - backgroundLeftPadding, y - backgroundPaddingY, width + backgroundLeftPadding + backgroundRightPadding, rowControlHeight + backgroundPaddingY * 2);
             setComponentBounds(label, x, y, labelWidth, rowControlHeight);
             if (toggleButton != null) {
-                int toggleWidth = localScale(68);
-                setComponentBounds(toggleButton, controlRight - toggleWidth, y, toggleWidth, rowControlHeight);
+                int toggleWidth = localScale(24);
+                int toggleHeight = localScale(12);
+                setComponentBounds(toggleButton, controlCenter - toggleWidth / 2, y + (rowControlHeight - toggleHeight) / 2, toggleWidth, toggleHeight);
             }
             if (minusButton != null) {
                 int controlWidth = localScale(48);
                 int buttonWidth = localScale(10);
                 int valueWidth = localScale(28);
-                int controlLeft = controlRight - localScale(34) - controlWidth / 2;
+                int controlLeft = controlCenter - controlWidth / 2;
                 setComponentBounds(minusButton, controlLeft, y, buttonWidth, rowControlHeight);
                 setComponentBounds(valueInputBox, controlLeft + buttonWidth, y, valueWidth, rowControlHeight);
                 valueInputBox.textPosition.y = textButtonTextY(y, rowControlHeight);
                 setComponentBounds(plusButton, controlLeft + buttonWidth + valueWidth, y, buttonWidth, rowControlHeight);
             }
             if (sliderBar != null) {
-                int controlLeft = controlRight - localScale(76);
+                int controlLeft = controlCenter - localScale(38);
                 int sliderWidth = localScale(42);
                 setComponentBounds(sliderBar, controlLeft, y - localScale(2), sliderWidth, rowControlHeight);
                 setComponentBounds(valueLabel, controlLeft + localScale(46), y, localScale(30), rowControlHeight);
@@ -1562,8 +1598,7 @@ public class GUIConfig extends AGUIBase {
             }
             if (modeButton != null) {
                 int modeWidth = type == SettingType.AIRCRAFT_CONTROL_MODE ? localScale(86) : localScale(68);
-                int modeCenterOffset = type == SettingType.AIRCRAFT_CONTROL_MODE ? (modeWidth - localScale(68)) / 2 : 0;
-                setComponentBounds(modeButton, controlRight - modeWidth + modeCenterOffset, y, modeWidth, rowControlHeight);
+                setComponentBounds(modeButton, controlCenter - modeWidth / 2, y, modeWidth, rowControlHeight);
             }
         }
 
@@ -1575,7 +1610,9 @@ public class GUIConfig extends AGUIBase {
             }
             label.color = changedSettings.contains(id) ? COLOR_CHANGED : COLOR_TEXT;
             if (toggleButton != null) {
-                toggleButton.text = Boolean.TRUE.equals(entry.value) ? LanguageSystem.GUI_CONFIG_ON.getCurrentValue() : LanguageSystem.GUI_CONFIG_OFF.getCurrentValue();
+                boolean active = Boolean.TRUE.equals(entry.value);
+                toggleButton.text = "";
+                toggleButton.active = active;
                 toggleButton.textColorOverride = changedSettings.contains(id) ? COLOR_CHANGED : COLOR_TEXT;
             }
             if (minusButton != null) {
@@ -1758,9 +1795,9 @@ public class GUIConfig extends AGUIBase {
             int thumbHeight = Math.max(localScale(8), height - localScale(3));
             int thumbX = x + (int) Math.round(ratio * (width - thumbWidth));
             int trackY = y + height / 2 - trackHeight;
-            drawRect(trackRenderable, x, trackY, width, trackHeight, COLOR_DIM_TEXT, 0.55F, getZOffset(), blendingEnabled);
-            drawRect(fillRenderable, x, trackY, thumbX - x + thumbWidth / 2, trackHeight, changedSettings.contains(row.id) ? COLOR_CHANGED : COLOR_TEXT, 0.85F, getZOffset() + 1, blendingEnabled);
-            drawRect(thumbRenderable, thumbX, y + (height - thumbHeight) / 2, thumbWidth, thumbHeight, COLOR_SCROLL_THUMB, isMouseInBounds(mouseX, mouseY) ? 1.0F : 0.85F, getZOffset() + 2, blendingEnabled);
+            drawRect(trackRenderable, x, trackY, width, trackHeight, COLOR_DIM_TEXT, 1.0F, getZOffset(), blendingEnabled);
+            drawRect(fillRenderable, x, trackY, thumbX - x + thumbWidth / 2, trackHeight, changedSettings.contains(row.id) ? COLOR_CHANGED : COLOR_TEXT, 1.0F, getZOffset() + 1, blendingEnabled);
+            drawRect(thumbRenderable, thumbX, y + (height - thumbHeight) / 2, thumbWidth, thumbHeight, COLOR_SCROLL_THUMB, 1.0F, getZOffset() + 2, blendingEnabled);
         }
     }
 
@@ -1798,17 +1835,20 @@ public class GUIConfig extends AGUIBase {
 
     private class KeyboardBindingRow extends ControlListRow {
         private final ControlsKeyboard control;
+        private final SolidRect labelBackground;
         private final TextLabel label;
         private final KeybindBox box;
 
         private KeyboardBindingRow(final ControlsKeyboard control) {
             this.control = control;
+            addComponent(labelBackground = new SolidRect(0, 0, 1, 1, COLOR_CELL, ROW_ALPHA));
             addComponent(label = new TextLabel(0, 0, 190, 14, "", COLOR_TEXT, TextAlignment.LEFT_ALIGNED, 0.85F));
             addComponent(box = new KeybindBox(control));
         }
 
         @Override
         protected void setVisible(boolean visible) {
+            labelBackground.visible = visible;
             label.visible = visible;
             box.visible = visible;
         }
@@ -1816,7 +1856,12 @@ public class GUIConfig extends AGUIBase {
         @Override
         protected void setPosition(int x, int y, int width) {
             int boxWidth = localScale(100);
-            setComponentBounds(label, x, y, width - localScale(115), localScale(14));
+            int labelWidth = width - localScale(115);
+            int backgroundLeftPadding = localScale(2);
+            int backgroundRightPadding = localScale(6);
+            int backgroundPaddingY = localScale(1);
+            setComponentBounds(labelBackground, x - backgroundLeftPadding, y - backgroundPaddingY, width + backgroundLeftPadding + backgroundRightPadding, localScale(14) + backgroundPaddingY * 2);
+            setComponentBounds(label, x, y, labelWidth, localScale(14));
             setComponentBounds(box, x + width - boxWidth - localScale(4), y, boxWidth, localScale(14));
         }
 
@@ -1833,17 +1878,20 @@ public class GUIConfig extends AGUIBase {
 
     private class KeyboardDynamicRow extends ControlListRow {
         private final ControlsKeyboardDynamic control;
+        private final SolidRect labelBackground;
         private final TextLabel label;
         private final TextLabel value;
 
         private KeyboardDynamicRow(ControlsKeyboardDynamic control) {
             this.control = control;
+            addComponent(labelBackground = new SolidRect(0, 0, 1, 1, COLOR_CELL, ROW_ALPHA));
             addComponent(label = new TextLabel(0, 0, 190, 14, "", COLOR_TEXT, TextAlignment.LEFT_ALIGNED, 0.85F));
             addComponent(value = new TextLabel(0, 0, 100, 14, "", COLOR_DIM_TEXT, TextAlignment.LEFT_ALIGNED, 0.85F));
         }
 
         @Override
         protected void setVisible(boolean visible) {
+            labelBackground.visible = visible;
             label.visible = visible;
             value.visible = visible;
         }
@@ -1851,7 +1899,12 @@ public class GUIConfig extends AGUIBase {
         @Override
         protected void setPosition(int x, int y, int width) {
             int valueWidth = localScale(100);
-            setComponentBounds(label, x, y, width - localScale(115), localScale(14));
+            int labelWidth = width - localScale(115);
+            int backgroundLeftPadding = localScale(2);
+            int backgroundRightPadding = localScale(6);
+            int backgroundPaddingY = localScale(1);
+            setComponentBounds(labelBackground, x - backgroundLeftPadding, y - backgroundPaddingY, width + backgroundLeftPadding + backgroundRightPadding, localScale(14) + backgroundPaddingY * 2);
+            setComponentBounds(label, x, y, labelWidth, localScale(14));
             setComponentBounds(value, x + width - valueWidth - localScale(4), y, valueWidth, localScale(14));
         }
 
@@ -1864,10 +1917,12 @@ public class GUIConfig extends AGUIBase {
 
     private class JoystickAssignmentRow extends ControlListRow {
         private final ControlsJoystick control;
+        private final SolidRect background;
         private final TextButton button;
 
         private JoystickAssignmentRow(final ControlsJoystick control) {
             this.control = control;
+            addComponent(background = new SolidRect(0, 0, 1, 1, COLOR_CELL, ROW_ALPHA));
             addComponent(button = new TextButton(0, 0, 200, 14, control.language.getCurrentValue()) {
                 @Override
                 public void onClicked(boolean leftSide) {
@@ -1888,12 +1943,18 @@ public class GUIConfig extends AGUIBase {
 
         @Override
         protected void setVisible(boolean visible) {
+            background.visible = visible;
             button.visible = visible;
         }
 
         @Override
         protected void setPosition(int x, int y, int width) {
-            setComponentBounds(button, x, y, width - localScale(24), localScale(14));
+            int buttonWidth = width - localScale(24);
+            int backgroundLeftPadding = localScale(2);
+            int backgroundRightPadding = localScale(6);
+            int backgroundPaddingY = localScale(1);
+            setComponentBounds(background, x - backgroundLeftPadding, y - backgroundPaddingY, buttonWidth + backgroundLeftPadding + backgroundRightPadding, localScale(14) + backgroundPaddingY * 2);
+            setComponentBounds(button, x, y, buttonWidth, localScale(14));
         }
 
         @Override
@@ -1960,6 +2021,7 @@ public class GUIConfig extends AGUIBase {
         private final boolean outlined;
         private ColorRGB textColorOverride = COLOR_TEXT;
         private boolean active;
+        private boolean sliderSwitch;
 
         private TextButton(int x, int y, int width, int height, String text) {
             this(x, y, width, height, text, false);
@@ -1973,23 +2035,54 @@ public class GUIConfig extends AGUIBase {
 
         @Override
         public void render(AGUIBase gui, int mouseX, int mouseY, boolean renderBright, boolean renderLitTexture, boolean blendingEnabled, float partialTicks) {
-            if (outlined) {
-                drawOutline(underlineRenderable, (int) position.x, (int) -position.y, width, height, enabled ? textColorOverride : COLOR_DIM_TEXT, active || enabled && isMouseInBounds(mouseX, mouseY) ? 1.0F : 0.65F, getZOffset(), blendingEnabled);
+            if (sliderSwitch) {
+                ColorRGB toggleColor = textColorOverride == COLOR_CHANGED ? COLOR_CHANGED : COLOR_TEXT;
+                int x = (int) position.x;
+                int y = (int) -position.y;
+                int inset = localScale(2);
+                int thumbSize = Math.max(localScale(6), height - inset * 2);
+                int thumbX = active ? x + width - inset - thumbSize : x + inset;
+                drawRect(underlineRenderable, x, y, width, height, COLOR_PANEL_HEADER, 1.0F, getZOffset(), blendingEnabled);
+                drawRect(underlineRenderable, thumbX, y + inset, thumbSize, thumbSize, toggleColor, 1.0F, getZOffset() + 1, blendingEnabled);
+                if (!blendingEnabled && isMouseInBounds(mouseX, mouseY)) {
+                    drawOutline(underlineRenderable, x, y, width, height, COLOR_ACCENT, 1.0F, getZOffset() + 2);
+                }
+                if (!blendingEnabled) {
+                    drawOutline(underlineRenderable, x, y, width, height, COLOR_OUTLINE, 1.0F, getZOffset() + 1);
+                }
+            } else if (outlined) {
+                boolean hovered = enabled && isMouseInBounds(mouseX, mouseY);
+                if (active || hovered) {
+                    drawRect(underlineRenderable, (int) position.x, (int) -position.y, width, height, hovered ? COLOR_BUTTON_HOVER : COLOR_BUTTON, BUTTON_ALPHA, getZOffset(), blendingEnabled);
+                }
+                if (!blendingEnabled && active) {
+                    drawRect(underlineRenderable, (int) position.x, (int) -position.y, localScale(3), height, COLOR_ACCENT, 1.0F, getZOffset() + 1);
+                }
             } else if (!blendingEnabled) {
                 if (enabled && (active || isMouseInBounds(mouseX, mouseY))) {
-                    drawRect(underlineRenderable, (int) position.x, (int) -position.y + height - localScale(2), width, localScale(1), textColorOverride, 1.0F, getZOffset());
+                    drawRect(underlineRenderable, (int) position.x, (int) -position.y + height - localScale(2), width, localScale(1), COLOR_ACCENT, 1.0F, getZOffset());
                 }
             }
         }
 
         @Override
         public void renderText(boolean renderTextLit, int worldLightValue) {
-            RenderText.drawText(text, null, textPosition, enabled ? textColorOverride : COLOR_DIM_TEXT, TextAlignment.CENTERED, textScale(0.85F), true, width, renderTextLit || ignoreGUILightingState, worldLightValue);
+            if (sliderSwitch) {
+                return;
+            }
+            ColorRGB textColor = enabled ? textColorOverride == COLOR_CHANGED ? COLOR_CHANGED : active && outlined ? COLOR_ACCENT : textColorOverride : COLOR_DIM_TEXT;
+            if (outlined) {
+                textPosition.x = position.x + localScale(18);
+                RenderText.drawText(text, null, textPosition, textColor, TextAlignment.LEFT_ALIGNED, textScale(0.85F), true, width - localScale(22), renderTextLit || ignoreGUILightingState, worldLightValue);
+            } else {
+                RenderText.drawText(text, null, textPosition, textColor, TextAlignment.CENTERED, textScale(0.85F), true, width, renderTextLit || ignoreGUILightingState, worldLightValue);
+            }
         }
     }
 
     private abstract class FlatButton extends GUIComponentButton {
         private final RenderableData backgroundRenderable;
+        private final RenderableData accentRenderable;
         private final RenderableData lockRenderable;
         private final boolean outlined;
         private boolean active;
@@ -2002,17 +2095,21 @@ public class GUIConfig extends AGUIBase {
         private FlatButton(int x, int y, int width, int height, String text, boolean outlined) {
             super(GUIConfig.this, x, y, width, height, text);
             this.backgroundRenderable = createRectRenderable(COLOR_BUTTON, BUTTON_ALPHA);
+            this.accentRenderable = createRectRenderable(COLOR_ACCENT, 1.0F);
             this.lockRenderable = createRectRenderable(COLOR_TEXT, 1.0F);
             this.outlined = outlined;
         }
 
         @Override
         public void render(AGUIBase gui, int mouseX, int mouseY, boolean renderBright, boolean renderLitTexture, boolean blendingEnabled, float partialTicks) {
-            ColorRGB color = active ? COLOR_BUTTON_ACTIVE : enabled && isMouseInBounds(mouseX, mouseY) ? COLOR_BUTTON_HOVER : COLOR_BUTTON;
-            drawRect(backgroundRenderable, (int) position.x, (int) -position.y, width, height, color, BUTTON_ALPHA, getZOffset(), blendingEnabled);
+            boolean hovered = enabled && isMouseInBounds(mouseX, mouseY);
+            if (!outlined || active || hovered) {
+                ColorRGB color = outlined ? hovered ? COLOR_BUTTON_HOVER : COLOR_BUTTON : active ? COLOR_BUTTON_ACTIVE : hovered ? COLOR_BUTTON_HOVER : COLOR_BUTTON;
+                drawRect(backgroundRenderable, (int) position.x, (int) -position.y, width, height, color, BUTTON_ALPHA, getZOffset(), blendingEnabled);
+            }
             if (!blendingEnabled) {
-                if (outlined) {
-                    drawOutline(backgroundRenderable, (int) position.x, (int) -position.y, width, height, COLOR_OUTLINE, 1.0F, getZOffset() + 1);
+                if (active) {
+                    drawRect(accentRenderable, (int) position.x, (int) -position.y, localScale(3), height, COLOR_ACCENT, 1.0F, getZOffset() + 1);
                 }
                 if (locked) {
                     drawLockIcon((int) position.x + width - localScale(16), (int) -position.y + localScale(5));
@@ -2023,8 +2120,13 @@ public class GUIConfig extends AGUIBase {
         @Override
         public void renderText(boolean renderTextLit, int worldLightValue) {
             int lockInset = locked ? localScale(18) : 0;
-            textPosition.x = position.x + (width - lockInset) / 2F;
-            RenderText.drawText(text, null, textPosition, locked ? COLOR_DIM_TEXT : COLOR_TEXT, TextAlignment.CENTERED, textScale(0.8F), true, width - (locked ? localScale(18) : localScale(4)), renderTextLit || ignoreGUILightingState, worldLightValue);
+            if (outlined) {
+                textPosition.x = position.x + localScale(18);
+                RenderText.drawText(text, null, textPosition, locked ? COLOR_DIM_TEXT : active ? COLOR_ACCENT : COLOR_TEXT, TextAlignment.LEFT_ALIGNED, textScale(0.8F), true, width - lockInset - localScale(22), renderTextLit || ignoreGUILightingState, worldLightValue);
+            } else {
+                textPosition.x = position.x + (width - lockInset) / 2F;
+                RenderText.drawText(text, null, textPosition, locked ? COLOR_DIM_TEXT : active ? COLOR_ACCENT : COLOR_TEXT, TextAlignment.CENTERED, textScale(0.8F), true, width - (locked ? localScale(18) : localScale(4)), renderTextLit || ignoreGUILightingState, worldLightValue);
+            }
         }
 
         private void drawLockIcon(int x, int y) {
