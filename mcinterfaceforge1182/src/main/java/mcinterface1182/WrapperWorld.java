@@ -1,6 +1,7 @@
 package mcinterface1182;
 
 import java.io.File;
+import java.lang.ref.WeakReference;
 import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -9,6 +10,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.WeakHashMap;
 
 import mcinterface1182.mixin.common.BiomeMixin;
 import mcinterface1182.mixin.common.ConcretePowderBlockMixin;
@@ -109,7 +111,7 @@ import net.minecraftforge.items.IItemHandler;
  */
 
 public class WrapperWorld extends AWrapperWorld {
-    private static final Map<Level, WrapperWorld> worldWrappers = new HashMap<>();
+    private static final Map<Level, WeakReference<WrapperWorld>> worldWrappers = new WeakHashMap<>();
     private final Map<UUID, BuilderEntityExisting> playerServerGunBuilders = new HashMap<>();
     private final Map<UUID, Integer> ticksSincePlayerJoin = new HashMap<>();
     private static Map<UUID, BuilderEntityRenderForwarder> playerFollowers = new HashMap<>();
@@ -126,10 +128,11 @@ public class WrapperWorld extends AWrapperWorld {
      */
     public static WrapperWorld getWrapperFor(Level world) {
         if (world != null) {
-            WrapperWorld wrapper = worldWrappers.get(world);
+            WeakReference<WrapperWorld> wrapperReference = worldWrappers.get(world);
+            WrapperWorld wrapper = wrapperReference != null ? wrapperReference.get() : null;
             if (wrapper == null || world != wrapper.world) {
                 wrapper = new WrapperWorld(world);
-                worldWrappers.put(world, wrapper);
+                worldWrappers.put(world, new WeakReference<>(wrapper));
             }
             return wrapper;
         } else {
@@ -1134,6 +1137,7 @@ public class WrapperWorld extends AWrapperWorld {
         if (event.getWorld() == world) {
             onUnload();
             worldWrappers.remove(world);
+            MinecraftForge.EVENT_BUS.unregister(this);
         }
     }
 

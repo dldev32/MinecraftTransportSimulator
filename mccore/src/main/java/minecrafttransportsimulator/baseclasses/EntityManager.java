@@ -12,6 +12,7 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 
 import minecrafttransportsimulator.entities.components.AEntityA_Base;
 import minecrafttransportsimulator.entities.components.AEntityA_Base.EntityAutoUpdateTime;
+import minecrafttransportsimulator.entities.components.AEntityB_Existing;
 import minecrafttransportsimulator.entities.components.AEntityC_Renderable;
 import minecrafttransportsimulator.entities.components.AEntityD_Definable;
 import minecrafttransportsimulator.entities.components.AEntityF_Multipart;
@@ -206,12 +207,20 @@ public abstract class EntityManager {
         if (beforePlayer) {
             //Need to do this before updating since defaults have to be set on all entities to ensure VMs run properly.
             world.beginProfiling("VariableModifiers", true);
-            allNormalDefinableTickableEntities.forEach(definable -> definable.setVariableDefaults());
-            allNormalDefinableTickableEntities.forEach(definable -> definable.updateVariableModifiers());
+            allNormalDefinableTickableEntities.forEach(definable -> {
+                if (shouldUpdateEntity(world, definable)) {
+                    definable.setVariableDefaults();
+                }
+            });
+            allNormalDefinableTickableEntities.forEach(definable -> {
+                if (shouldUpdateEntity(world, definable)) {
+                    definable.updateVariableModifiers();
+                }
+            });
             world.endProfiling();
             
             allNormalTickableEntities.forEach(entity -> {
-                if (!(entity instanceof AEntityG_Towable) || !(((AEntityG_Towable<?>) entity).blockMainUpdateCall())) {
+                if (shouldUpdateEntity(world, entity) && (!(entity instanceof AEntityG_Towable) || !(((AEntityG_Towable<?>) entity).blockMainUpdateCall()))) {
                     doTick(entity);
                 }
             });
@@ -227,10 +236,18 @@ public abstract class EntityManager {
                 doHotload();
             }
         } else {
-            allPlayerDefinableTickableEntities.forEach(definable -> definable.setVariableDefaults());
-            allPlayerDefinableTickableEntities.forEach(definable -> definable.updateVariableModifiers());
+            allPlayerDefinableTickableEntities.forEach(definable -> {
+                if (shouldUpdateEntity(world, definable)) {
+                    definable.setVariableDefaults();
+                }
+            });
+            allPlayerDefinableTickableEntities.forEach(definable -> {
+                if (shouldUpdateEntity(world, definable)) {
+                    definable.updateVariableModifiers();
+                }
+            });
             allPlayerTickableEntities.forEach(entity -> {
-                if (!(entity instanceof AEntityG_Towable) || !(((AEntityG_Towable<?>) entity).blockMainUpdateCall())) {
+                if (shouldUpdateEntity(world, entity) && (!(entity instanceof AEntityG_Towable) || !(((AEntityG_Towable<?>) entity).blockMainUpdateCall()))) {
                     doTick(entity);
                 }
             });
@@ -348,6 +365,9 @@ public abstract class EntityManager {
     }
 
     public static void doTick(AEntityA_Base entity) {
+        if (!shouldUpdateEntity(entity.world, entity)) {
+            return;
+        }
         entity.world.beginProfiling("MTSEntity_" + entity.uniqueUUID, true);
         if (entity instanceof AEntityD_Definable) {
             AEntityD_Definable<?> definable = (AEntityD_Definable<?>) entity;
@@ -360,6 +380,10 @@ public abstract class EntityManager {
             entity.update();
         }
         entity.world.endProfiling();
+    }
+
+    private static boolean shouldUpdateEntity(AWrapperWorld world, AEntityA_Base entity) {
+        return world.isClient() || !(entity instanceof EntityVehicleF_Physics || entity instanceof EntityPlacedPart) || world.chunkLoaded(((AEntityB_Existing) entity).position);
     }
 
     /**
@@ -489,7 +513,23 @@ public abstract class EntityManager {
     }
 
     public void onUnload() {
-        allEntities.forEach(entity -> entity.remove());
+        new ArrayList<>(allEntities).forEach(entity -> entity.remove());
+        Explosion.clearLingeringExplosions(getWorld());
+        allEntities.clear();
+        allNormalTickableEntities.clear();
+        allNormalDefinableTickableEntities.clear();
+        allPlayerTickableEntities.clear();
+        allPlayerDefinableTickableEntities.clear();
+        renderableEntities.clear();
+        entitiesByClass.clear();
+        trackedEntityMap.clear();
+        gunMap.clear();
+        bulletMap.clear();
+        hotloadedVehicles.clear();
+        hotloadedPlacedParts.clear();
+        hotloadedRiderIDs.clear();
+        managers.remove(this);
+        managersToHotload.remove(this);
         if (getWorld().isClient()) {
             CameraSystem.resetCameraProperties();
         }

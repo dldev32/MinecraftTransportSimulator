@@ -2,6 +2,7 @@ package minecrafttransportsimulator.baseclasses;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.WeakHashMap;
 
 import minecrafttransportsimulator.entities.components.AEntityB_Existing;
 import minecrafttransportsimulator.mcinterface.AWrapperWorld;
@@ -16,7 +17,7 @@ import minecrafttransportsimulator.mcinterface.InterfaceManager;
  */
 public class NavBeacon {
     private static final String BEACON_LISTING_KEY = "beacons";
-    private static final Map<AWrapperWorld, Map<String, NavBeacon>> cachedBeaconMaps = new HashMap<>();
+    private static final Map<AWrapperWorld, Map<String, NavBeacon>> cachedBeaconMaps = new WeakHashMap<>();
 
     public final String name;
     public final double glideSlope;

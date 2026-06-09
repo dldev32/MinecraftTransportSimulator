@@ -1,10 +1,11 @@
 package mcinterface1211;
 
+import java.lang.ref.WeakReference;
 import java.util.Collection;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.UUID;
+import java.util.WeakHashMap;
 
 import minecrafttransportsimulator.baseclasses.BoundingBox;
 import minecrafttransportsimulator.baseclasses.Damage;
@@ -45,8 +46,8 @@ import net.minecraft.core.registries.BuiltInRegistries;
 
 @EventBusSubscriber(modid = InterfaceLoader.MODID)
 public class WrapperEntity implements IWrapperEntity {
-    private static final Map<Entity, WrapperEntity> entityClientWrappers = new HashMap<>();
-    private static final Map<Entity, WrapperEntity> entityServerWrappers = new HashMap<>();
+    private static final Map<Entity, WeakReference<WrapperEntity>> entityClientWrappers = new WeakHashMap<>();
+    private static final Map<Entity, WeakReference<WrapperEntity>> entityServerWrappers = new WeakHashMap<>();
 
     protected final Entity entity;
     private AEntityB_Existing cachedEntityRiding;
@@ -61,11 +62,12 @@ public class WrapperEntity implements IWrapperEntity {
         if (entity instanceof Player) {
             return WrapperPlayer.getWrapperFor((Player) entity);
         } else if (entity != null) {
-            Map<Entity, WrapperEntity> entityWrappers = entity.level().isClientSide ? entityClientWrappers : entityServerWrappers;
-            WrapperEntity wrapper = entityWrappers.get(entity);
+            Map<Entity, WeakReference<WrapperEntity>> entityWrappers = entity.level().isClientSide ? entityClientWrappers : entityServerWrappers;
+            WeakReference<WrapperEntity> wrapperReference = entityWrappers.get(entity);
+            WrapperEntity wrapper = wrapperReference != null ? wrapperReference.get() : null;
             if (wrapper == null || !wrapper.isValid() || entity != wrapper.entity) {
                 wrapper = new WrapperEntity(entity);
-                entityWrappers.put(entity, wrapper);
+                entityWrappers.put(entity, new WeakReference<>(wrapper));
             }
             return wrapper;
         } else {

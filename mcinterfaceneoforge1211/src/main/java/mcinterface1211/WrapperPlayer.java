@@ -1,7 +1,8 @@
 package mcinterface1211;
 
-import java.util.HashMap;
+import java.lang.ref.WeakReference;
 import java.util.Map;
+import java.util.WeakHashMap;
 
 import minecrafttransportsimulator.items.components.AItemBase;
 import minecrafttransportsimulator.items.instances.ItemItem;
@@ -26,8 +27,8 @@ import net.minecraft.world.phys.AABB;
 import net.neoforged.neoforge.event.level.LevelEvent;
 
 public class WrapperPlayer extends WrapperEntity implements IWrapperPlayer {
-    private static final Map<Player, WrapperPlayer> playerClientWrappers = new HashMap<>();
-    private static final Map<Player, WrapperPlayer> playerServerWrappers = new HashMap<>();
+    private static final Map<Player, WeakReference<WrapperPlayer>> playerClientWrappers = new WeakHashMap<>();
+    private static final Map<Player, WeakReference<WrapperPlayer>> playerServerWrappers = new WeakHashMap<>();
 
     protected final Player player;
 
@@ -40,11 +41,12 @@ public class WrapperPlayer extends WrapperEntity implements IWrapperPlayer {
      */
     public static WrapperPlayer getWrapperFor(Player player) {
         if (player != null) {
-            Map<Player, WrapperPlayer> playerWrappers = player.level().isClientSide ? playerClientWrappers : playerServerWrappers;
-            WrapperPlayer wrapper = playerWrappers.get(player);
+            Map<Player, WeakReference<WrapperPlayer>> playerWrappers = player.level().isClientSide ? playerClientWrappers : playerServerWrappers;
+            WeakReference<WrapperPlayer> wrapperReference = playerWrappers.get(player);
+            WrapperPlayer wrapper = wrapperReference != null ? wrapperReference.get() : null;
             if (wrapper == null || !wrapper.isValid() || player != wrapper.player) {
                 wrapper = new WrapperPlayer(player);
-                playerWrappers.put(player, wrapper);
+                playerWrappers.put(player, new WeakReference<>(wrapper));
             }
             return wrapper;
         } else {
