@@ -32,6 +32,7 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.client.CameraType;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.ChatScreen;
+import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
@@ -47,6 +48,8 @@ import net.minecraft.world.level.material.Fluid;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.fml.ModLoadingContext;
+import net.neoforged.neoforge.client.gui.IConfigScreenFactory;
 import net.neoforged.neoforge.fluids.FluidStack;
 import net.neoforged.fml.common.EventBusSubscriber;
 
@@ -223,6 +226,21 @@ public class InterfaceClient implements IInterfaceClient {
     @Override
     public void setActiveGUI(AGUIBase gui) {
         Minecraft.getInstance().setScreen(new BuilderGUI(gui));
+    }
+
+    public static void registerConfigScreenFactory() {
+        ModLoadingContext.get().registerExtensionPoint(
+            IConfigScreenFactory.class,
+            () -> (container, parentScreen) -> createConfigScreen(parentScreen)
+        );
+    }
+
+    public static void openConfigScreen(Screen parentScreen) {
+        Minecraft.getInstance().setScreen(createConfigScreen(parentScreen));
+    }
+
+    private static Screen createConfigScreen(Screen parentScreen) {
+        return new MCConfigScreen(parentScreen);
     }
 
     @Override

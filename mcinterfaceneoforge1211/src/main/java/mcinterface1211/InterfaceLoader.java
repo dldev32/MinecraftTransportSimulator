@@ -82,6 +82,9 @@ public class InterfaceLoader {
     public InterfaceLoader(IEventBus modBus) {
         this.modBus = modBus;
         this.gameDirectory = FMLPaths.GAMEDIR.get().toFile().getAbsolutePath();
+        if (FMLLoader.getDist() == Dist.CLIENT) {
+            InterfaceClient.registerConfigScreenFactory();
+        }
         modBus.addListener(this::init);
         modBus.addListener(this::onPostConstruction);
         modBus.addListener(InterfacePacket::registerPayloads);

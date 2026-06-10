@@ -14,7 +14,6 @@ import org.lwjgl.glfw.GLFW;
 import com.mojang.blaze3d.platform.InputConstants;
 
 import minecrafttransportsimulator.baseclasses.EntityManager;
-import minecrafttransportsimulator.guis.instances.GUIConfig;
 import minecrafttransportsimulator.jsondefs.JSONConfigClient.ConfigJoystick;
 import minecrafttransportsimulator.mcinterface.IInterfaceInput;
 import minecrafttransportsimulator.mcinterface.InterfaceManager;
@@ -25,6 +24,11 @@ import minecrafttransportsimulator.systems.ControlSystem.ControlsJoystick;
 import minecrafttransportsimulator.systems.LanguageSystem;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.screens.PauseScreen;
+import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.gui.screens.options.OptionsScreen;
+import net.minecraft.network.chat.Component;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.neoforge.client.event.InputEvent;
 import net.neoforged.neoforge.client.event.MovementInputUpdateEvent;
@@ -39,6 +43,10 @@ public class InterfaceInput implements IInterfaceInput {
     private static KeyMapping configKey;
     private static KeyMapping importKey;
     private static int lastScrollValue;
+    private static final Component CONFIG_BUTTON_TEXT = Component.literal("IV Config");
+    private static final int CONFIG_BUTTON_WIDTH = 98;
+    private static final int CONFIG_BUTTON_HEIGHT = 20;
+    private static final int CONFIG_BUTTON_MARGIN = 6;
 
     //Joystick variables.
     private static boolean runningJoystickThread = false;
@@ -339,10 +347,29 @@ public class InterfaceInput implements IInterfaceInput {
 
         //Check if we pressed the config or import key.
         if (configKey.isDown() && !InterfaceManager.clientInterface.isGUIOpen()) {
-            new GUIConfig();
+            InterfaceClient.openConfigScreen(null);
         } else if (ConfigSystem.settings.general.devMode.value && importKey.isDown()) {
         	EntityManager.doImports(() -> InterfaceManager.clientInterface.getClientPlayer().displayChatMessage(LanguageSystem.SYSTEM_DEBUG, JSONParser.importAllJSONs(true)));
         }
+    }
+
+    @SubscribeEvent
+    public static void onIVScreenInit(ScreenEvent.Init.Post event) {
+        Screen screen = event.getScreen();
+        if (screen instanceof PauseScreen) {
+            if (!((PauseScreen) screen).showsPauseMenu()) {
+                return;
+            }
+            addConfigButton(event, screen);
+        } else if (screen instanceof OptionsScreen) {
+            addConfigButton(event, screen);
+        }
+    }
+
+    private static void addConfigButton(ScreenEvent.Init.Post event, Screen screen) {
+        event.addListener(Button.builder(CONFIG_BUTTON_TEXT, button -> InterfaceClient.openConfigScreen(screen))
+            .bounds(screen.width - CONFIG_BUTTON_WIDTH - CONFIG_BUTTON_MARGIN, CONFIG_BUTTON_MARGIN, CONFIG_BUTTON_WIDTH, CONFIG_BUTTON_HEIGHT)
+            .build());
     }
 
     /**
