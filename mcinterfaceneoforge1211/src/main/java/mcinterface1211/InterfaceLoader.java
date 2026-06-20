@@ -108,6 +108,7 @@ public class InterfaceLoader {
         //Init interfaces and send to the main game system.
         if (isClient) {
             new InterfaceManager(MODID, gameDirectory, new InterfaceCore(), new InterfacePacket(), new InterfaceClient(), new InterfaceInput(), new InterfaceSound(), new InterfaceRender());
+            FMODWrapper.initialize(gameDirectory);
             modBus.addListener(InterfaceInput::onIVRegisterKeyMappingsEvent);
             modBus.addListener(InterfaceRender::onIVRegisterShadersEvent);
             modBus.addListener(InterfaceRender::onIVRegisterRenderersEvent);

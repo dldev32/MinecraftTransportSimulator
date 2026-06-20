@@ -29,6 +29,7 @@ import minecrafttransportsimulator.systems.ConfigSystem;
 import minecrafttransportsimulator.systems.LanguageSystem;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.neoforge.event.level.LevelEvent;
+import net.neoforged.neoforge.client.event.ScreenEvent;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 
@@ -82,48 +83,28 @@ public class InterfaceSound implements IInterfaceSound {
      * as well as queue up sounds that aren't playing yet but need to.
      */
     public static void update() {
-        if (ALC.getFunctionProvider() == null) {
-            //Don't go any further if OpenAL isn't ready.
-            return;
-        }
+        boolean openALReady = ALC.getFunctionProvider() != null;
 
         //Handle pause state logic.
         if (InterfaceManager.clientInterface.isGamePaused()) {
-            if (!isSystemPaused) {
-                for (SoundInstance sound : playingSounds) {
-                    AL10.alSourcePause(sound.sourceIndex);
-                }
-                isSystemPaused = true;
-            } else {
-                for (SoundInstance sound : playingSounds) {
-                    //Stop playing sounds when paused as they can get corrupted.
-                    if (sound.radio != null) {
-                        pausedRadioSounds.add(sound);
-                        sound.radio.currentStation.removeRadio(sound.radio);
-                    } else {
-                        sound.stopSound = true;
-                    }
-                }
-                playingSounds.removeAll(pausedRadioSounds);
-            }
+            setPauseState(true, true);
             return;
-        } else if (isSystemPaused) {
-            for (SoundInstance sound : playingSounds) {
-                AL10.alSourcePlay(sound.sourceIndex);
-            }
-            for (SoundInstance sound : pausedRadioSounds) {
-                sound.radio.currentStation.addRadio(sound.radio);
-            }
-            pausedRadioSounds.clear();
-            isSystemPaused = false;
+        }
+        setPauseState(false, false);
+
+        if (!openALReady) {
+            FMODWrapper.update(InterfaceManager.clientInterface.getClientPlayer());
+            return;
         }
 
         //Get the player for further calculations.
         IWrapperPlayer player = InterfaceManager.clientInterface.getClientPlayer();
+        FMODWrapper.update(player);
 
         //If the client world is null, or we don't have a player we need to stop all sounds.
         if (InterfaceManager.clientInterface.getClientWorld() == null || player == null) {
             queuedSounds.clear();
+            FMODWrapper.stopAllSounds();
             for (SoundInstance sound : playingSounds) {
                 sound.stopSound = true;
             }
@@ -223,8 +204,52 @@ public class InterfaceSound implements IInterfaceSound {
         }
     }
 
+    private static void setPauseState(boolean paused, boolean cleanupOpenALSounds) {
+        boolean openALReady = ALC.getFunctionProvider() != null;
+        if (paused) {
+            if (!isSystemPaused) {
+                if (openALReady) {
+                    for (SoundInstance sound : playingSounds) {
+                        AL10.alSourcePause(sound.sourceIndex);
+                    }
+                }
+                FMODWrapper.pauseAll(true);
+                isSystemPaused = true;
+            } else if (cleanupOpenALSounds && openALReady) {
+                for (SoundInstance sound : playingSounds) {
+                    //Stop playing sounds when paused as they can get corrupted.
+                    if (sound.radio != null) {
+                        pausedRadioSounds.add(sound);
+                        sound.radio.currentStation.removeRadio(sound.radio);
+                    } else {
+                        sound.stopSound = true;
+                    }
+                }
+                playingSounds.removeAll(pausedRadioSounds);
+            }
+        } else if (isSystemPaused) {
+            if (openALReady) {
+                for (SoundInstance sound : playingSounds) {
+                    AL10.alSourcePlay(sound.sourceIndex);
+                }
+            }
+            FMODWrapper.pauseAll(false);
+            for (SoundInstance sound : pausedRadioSounds) {
+                sound.radio.currentStation.addRadio(sound.radio);
+            }
+            pausedRadioSounds.clear();
+            isSystemPaused = false;
+        }
+    }
+
     @Override
     public void playQuickSound(SoundInstance sound) {
+        if (InterfaceManager.clientInterface.isGamePaused()) {
+            return;
+        }
+        if (FMODWrapper.playEvent(sound)) {
+            return;
+        }
         if (ALC.getFunctionProvider() != null && sourceGetFailures < 10) {
             //First get the IntBuffer pointer to where this sound data is stored.
             Integer dataBufferPointer;
@@ -421,6 +446,7 @@ public class InterfaceSound implements IInterfaceSound {
 
     public static void stopAllSounds() {
         queuedSounds.clear();
+        FMODWrapper.stopAllSounds();
         for (SoundInstance sound : playingSounds) {
             if (sound.radio != null) {
                 sound.radio.stop();
@@ -448,6 +474,18 @@ public class InterfaceSound implements IInterfaceSound {
         }
     }
 
+    @SubscribeEvent
+    public static void onIVScreenOpening(ScreenEvent.Opening event) {
+        setPauseState(event.getNewScreen() != null && event.getNewScreen().isPauseScreen(), false);
+    }
+
+    @SubscribeEvent
+    public static void onIVScreenClosing(ScreenEvent.Closing event) {
+        if (event.getScreen().isPauseScreen()) {
+            setPauseState(false, false);
+        }
+    }
+
     /**
      * Stop all sounds when the world is unloaded.
      */
@@ -455,6 +493,7 @@ public class InterfaceSound implements IInterfaceSound {
     public static void onIVWorldUnload(LevelEvent.Unload event) {
         if (event.getLevel().isClientSide()) {
             queuedSounds.removeIf(soundInstance -> event.getLevel() == ((WrapperWorld) soundInstance.entity.world).world);
+            FMODWrapper.stopAllSounds();
             for (SoundInstance sound : playingSounds) {
                 if (event.getLevel() == ((WrapperWorld) sound.entity.world).world) {
                     if (sound.radio != null) {

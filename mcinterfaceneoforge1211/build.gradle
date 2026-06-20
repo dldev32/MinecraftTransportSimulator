@@ -8,6 +8,9 @@ base.archivesName = project.archive_name
 
 java.toolchain.languageVersion = JavaLanguageVersion.of(21)
 
+// Ensure mccore is evaluated first so we can reference its sourceSets.
+evaluationDependsOn(":mccore")
+
 neoForge {
     version = project.neoforge_version
     parchment {
@@ -27,11 +30,19 @@ neoForge {
     mods {
         mts {
             sourceSet sourceSets.main
+            // Include mccore's own source set so its classes are part of the
+            // mts module during dev runs. This lets the mixin system find
+            // mccore classes (they are compileOnly and only embedded in the
+            // production fat JAR). Using the source set avoids JPMS split-
+            // package errors because it does not pull in the embedded
+            // jorbis/jlayer JARs — only mccore's own compiled classes.
+            sourceSet project(":mccore").sourceSets.main
         }
     }
 }
 
 repositories {
+    mavenCentral()
     // location of the maven that hosts JEI files since January 2023
     maven { url = "https://maven.blamejared.com/" }
     // Cursemaven hosts the Jade API artifact for optional compile-time integration.
@@ -49,11 +60,22 @@ configurations {
 }
 
 dependencies {
+    def lwjglFmodVersion = "3.3.3"
+
     // Embed mccore as fat-jar. Exclude its transitive deps (jorbis, jlayer) from
     // the runtime module path — they are already embedded as classes inside mccore's JAR.
     // Without this, JPMS sees duplicate packages (com.jcraft.jorbis etc.) in both the
     // mts module and the standalone jorbis module, causing a ResolutionException.
     embed(project(path: ":mccore", configuration: "relocated")) {
+        transitive = false
+    }
+    embed("org.lwjgl:lwjgl-fmod:${lwjglFmodVersion}") {
+        transitive = false
+    }
+    implementation("org.lwjgl:lwjgl-fmod:${lwjglFmodVersion}") {
+        transitive = false
+    }
+    clientAdditionalRuntimeClasspath("org.lwjgl:lwjgl-fmod:${lwjglFmodVersion}") {
         transitive = false
     }
     compileOnly "mezz.jei:jei-${project.mc_version}-neoforge-api:${project.jei_version}"
@@ -73,6 +95,8 @@ jar {
     // NOTE: javazoom (JLayer/MP3) is NOT excluded — it is not provided by NeoForge.
     exclude "com/jcraft/**"
     exclude "META-INF/maven/org.jcraft/**"
+    exclude "module-info.class"
+    exclude "META-INF/versions/**/module-info.class"
     manifest {
         attributes(["MixinConfigs": "mts.mixins.json",
                      "Implementation-Version": project.mod_version])

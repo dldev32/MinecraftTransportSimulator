@@ -112,7 +112,8 @@ public class InterfaceClient implements IInterfaceClient {
 
     @Override
     public boolean isGamePaused() {
-        return Minecraft.getInstance().isPaused();
+        Minecraft minecraft = Minecraft.getInstance();
+        return minecraft.isPaused() || (minecraft.screen != null && minecraft.screen.isPauseScreen());
     }
 
     @Override

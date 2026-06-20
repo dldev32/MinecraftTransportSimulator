@@ -10,6 +10,12 @@ public class JSONSound {
     @JSONDescription("The name for this sound.  This tells MTS where to find it.  Format is packID:soundName.  All sounds should be located in the 'sounds' folder as the first folder underneath your main pack folder.  Not required if soundVariations is set.")
     public String name;
 
+    @JSONDescription("Optional FMOD Studio event path to play instead of this sound on versions that support FMOD.  Format is event:/bank/event.  Versions without FMOD support will ignore this field.")
+    public String eventName;
+
+    @JSONDescription("Optional mapping of MTS computed variables to FMOD Studio event parameters.  This allows FMOD conditions and parameter-driven tracks to follow mod variables.  If parameterName is omitted, variable is used as the FMOD parameter name.")
+    public List<FMODEventParameter> eventParameters;
+
     @JSONDescription("A list of sounds to play instead of the main sound.  If this is present, then one of these at random will be played each time this sound is played rather than the normal sound.  Note that a paramter for name is still required to allow the audio system to track this sound, and should be unique to the entity this is defined on.")
     public List<String> soundVariations;
 
@@ -70,4 +76,22 @@ public class JSONSound {
 
     @JSONDescription("How many degrees outward from soundVector the sound can be heard.")
     public double conicalAngle;
+
+    public static class FMODEventParameter {
+        @JSONRequired
+        @JSONDescription("The MTS computed variable to pass into FMOD.")
+        public String variable;
+
+        @JSONDescription("The FMOD Studio parameter name to set.  If omitted, the MTS variable name is used.")
+        public String parameterName;
+
+        @JSONDescription("A multiplier applied to the MTS variable value before it is passed to FMOD.")
+        public double factor = 1;
+
+        @JSONDescription("An offset added after the factor is applied before the value is passed to FMOD.")
+        public double offset;
+
+        @JSONDescription("If true, FMOD parameter seek speed is ignored and the value is applied immediately.  This is recommended for state/condition parameters.")
+        public boolean ignoreSeekSpeed = true;
+    }
 }
