@@ -100,6 +100,12 @@ public class PacketPartGun extends APacketEntity<PartGun> {
                 gun.performGunHandheldMovements();
                 break;
             }
+            case OPTIC_ZOOM_IN: {
+                return gun.entityOn.changeCameraZoom(true);
+            }
+            case OPTIC_ZOOM_OUT: {
+                return gun.entityOn.changeCameraZoom(false);
+            }
         }
         return stateRequest.sendToClients;
     }
@@ -114,7 +120,9 @@ public class PacketPartGun extends APacketEntity<PartGun> {
         AIM_OFF(true),
         BULLETS_OUT(false),
         BULLETS_PRESENT(false),
-        HANDHELD_MOVEMENTS(true);
+        HANDHELD_MOVEMENTS(true),
+        OPTIC_ZOOM_IN(true),
+        OPTIC_ZOOM_OUT(true);
 
         private final boolean sendToClients;
 

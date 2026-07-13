@@ -26,6 +26,7 @@ import minecrafttransportsimulator.guis.components.AGUIBase;
 import minecrafttransportsimulator.guis.components.GUIComponentCrosshair;
 import minecrafttransportsimulator.guis.components.GUIComponentItem;
 import minecrafttransportsimulator.guis.components.GUIComponentLabel;
+import minecrafttransportsimulator.guis.components.GUIComponentOpticalReticle;
 import minecrafttransportsimulator.items.components.AItemPack;
 import minecrafttransportsimulator.items.components.AItemPart;
 import minecrafttransportsimulator.jsondefs.JSONItem.ItemComponentType;
@@ -55,6 +56,7 @@ public class GUIOverlay extends AGUIBase {
     private GUIComponentLabel gunLabel;
     private GUIComponentItem scannerItem;
     private GUIComponentCrosshair aimingCrosshair;
+    private GUIComponentOpticalReticle opticalReticle;
     private final List<String> tooltipText = new ArrayList<>();
     private EntityInteractResult lastInteractResult;
     private AEntityE_Interactable<?> lastCollisionGroupHoverEntity;
@@ -78,6 +80,7 @@ public class GUIOverlay extends AGUIBase {
         // Start crosshair at screen centre; setStates() repositions it every frame.
         addComponent(aimingCrosshair = new GUIComponentCrosshair(screenWidth / 2, screenHeight / 2));
         aimingCrosshair.visible = false;
+        addComponent(opticalReticle = new GUIComponentOpticalReticle(screenWidth, screenHeight));
         addComponent(scannerItem = new GUIComponentItem(0, screenHeight / 4, 6.0F) {
             //Render the item stats as a tooltip, as it's easier to see.
             @Override
@@ -105,6 +108,7 @@ public class GUIOverlay extends AGUIBase {
         //Set gun label text, if we are controlling a gun.
         gunLabel.visible = false;
         aimingCrosshair.visible = false;
+        opticalReticle.visible = CameraSystem.customCameraReticle != null;
         aimingCrosshair.pendingImpactPoint = null;
         aimingCrosshair.vehicleRef = null;
         if (!InterfaceManager.clientInterface.isChatOpen()) {

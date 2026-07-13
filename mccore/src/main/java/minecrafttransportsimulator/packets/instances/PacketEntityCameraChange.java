@@ -2,6 +2,7 @@ package minecrafttransportsimulator.packets.instances;
 
 import io.netty.buffer.ByteBuf;
 import minecrafttransportsimulator.entities.components.AEntityB_Existing;
+import minecrafttransportsimulator.entities.instances.PartSeat;
 import minecrafttransportsimulator.mcinterface.AWrapperWorld;
 import minecrafttransportsimulator.packets.components.APacketEntity;
 
@@ -23,7 +24,12 @@ public class PacketEntityCameraChange extends APacketEntity<AEntityB_Existing> {
 
     @Override
     public boolean handle(AWrapperWorld world, AEntityB_Existing entity) {
-        ++entity.cameraIndex;
+        if (entity instanceof PartSeat) {
+            ((PartSeat) entity).setNextCamera();
+        } else {
+            entity.cameraZoomIndex = 0;
+            ++entity.cameraIndex;
+        }
         return true;
     }
 }

@@ -102,6 +102,22 @@ public final class ControlSystem {
         if (playerGun != null && playerGun.activeGun != null && !InterfaceManager.clientInterface.isGUIOpen() && ControlsKeyboard.GENERAL_RELOAD.isPressed()) {
             InterfaceManager.packetInterface.sendToServer(new PacketPartGun(playerGun.activeGun, PacketPartGun.Request.RELOAD_HAND));
         }
+        if (!InterfaceManager.clientInterface.isGUIOpen() && ControlsKeyboard.GENERAL_OPTICS_SWITCH.isPressed()) {
+            AEntityB_Existing ridingEntity = player.getEntityRiding();
+            if (ridingEntity instanceof PartSeat) {
+                InterfaceManager.packetInterface.sendToServer(new PacketPartSeat((PartSeat) ridingEntity, SeatAction.CHANGE_OPTIC));
+            } else if (playerGun != null && playerGun.activeGun != null && playerGun.activeGun.isHandHeldGunAimed && !playerGun.cameras.isEmpty()) {
+                InterfaceManager.packetInterface.sendToServer(new PacketEntityCameraChange(playerGun));
+            }
+        }
+        if (player.getEntityRiding() == null && playerGun != null && playerGun.activeGun != null && playerGun.activeGun.isHandHeldGunAimed) {
+            if (ControlsKeyboard.GENERAL_OPTICS_ZOOM_I.isPressed()) {
+                InterfaceManager.packetInterface.sendToServer(new PacketPartGun(playerGun.activeGun, PacketPartGun.Request.OPTIC_ZOOM_IN));
+            }
+            if (ControlsKeyboard.GENERAL_OPTICS_ZOOM_O.isPressed()) {
+                InterfaceManager.packetInterface.sendToServer(new PacketPartGun(playerGun.activeGun, PacketPartGun.Request.OPTIC_ZOOM_OUT));
+            }
+        }
     }
 
     public static void resetMouseYoke() {
@@ -930,6 +946,9 @@ public final class ControlSystem {
         GENERAL_CUSTOM9(ControlsJoystick.GENERAL_CUSTOM9, true, "NUMPAD8", LanguageSystem.INPUT_CUSTOM9),
         GENERAL_CUSTOM10(ControlsJoystick.GENERAL_CUSTOM10, true, "NUMPAD9", LanguageSystem.INPUT_CUSTOM10),
         GENERAL_RELOAD(ControlsJoystick.GENERAL_RELOAD, true, "R", LanguageSystem.INPUT_GUN_RELOAD),
+        GENERAL_OPTICS_SWITCH(ControlsJoystick.GENERAL_OPTICS_SWITCH, true, "Z", LanguageSystem.INPUT_OPTICS_SWITCH),
+        GENERAL_OPTICS_ZOOM_I(ControlsJoystick.GENERAL_OPTICS_ZOOM_I, true, "PRIOR", LanguageSystem.INPUT_ZOOM_I),
+        GENERAL_OPTICS_ZOOM_O(ControlsJoystick.GENERAL_OPTICS_ZOOM_O, true, "NEXT", LanguageSystem.INPUT_ZOOM_O),
 
         AIRCRAFT_YAW_R(ControlsJoystick.AIRCRAFT_YAW, false, "L", LanguageSystem.INPUT_YAW_R),
         AIRCRAFT_YAW_L(ControlsJoystick.AIRCRAFT_YAW, false, "J", LanguageSystem.INPUT_YAW_L),
@@ -1051,6 +1070,9 @@ public final class ControlSystem {
         GENERAL_CUSTOM9(false, true, LanguageSystem.INPUT_CUSTOM9),
         GENERAL_CUSTOM10(false, true, LanguageSystem.INPUT_CUSTOM10),
         GENERAL_RELOAD(false, true, LanguageSystem.INPUT_GUN_RELOAD),
+        GENERAL_OPTICS_SWITCH(false, true, LanguageSystem.INPUT_OPTICS_SWITCH),
+        GENERAL_OPTICS_ZOOM_I(false, true, LanguageSystem.INPUT_ZOOM_I),
+        GENERAL_OPTICS_ZOOM_O(false, true, LanguageSystem.INPUT_ZOOM_O),
 
         AIRCRAFT_CAMLOCK(false, true, LanguageSystem.INPUT_CAMLOCK),
         AIRCRAFT_YAW(true, false, LanguageSystem.INPUT_YAW),

@@ -93,6 +93,7 @@ public abstract class AEntityB_Existing extends AEntityA_Base {
     //Camera variables.
     public int zoomLevel;
     public int cameraIndex;
+    public int cameraZoomIndex;
 
     //Head tracking variables
     public boolean hasHeadTracking;
@@ -117,6 +118,7 @@ public abstract class AEntityB_Existing extends AEntityA_Base {
             this.motion = data.getPoint3d("motion");
             this.zoomLevel = data.getInteger("zoomLevel");
             this.cameraIndex = data.getInteger("cameraIndex");
+            this.cameraZoomIndex = data.getInteger("cameraZoomIndex");
             this.radioData = data.getData("radio");
         } else {
             this.position = new Point3D();
@@ -185,16 +187,12 @@ public abstract class AEntityB_Existing extends AEntityA_Base {
                     if (activeCameraSwitchbox != null && !activeCameraSwitchbox.runSwitchbox(0, false)) {
                         //Camera is inactive, go to next.
                         ++cameraIndex;
+                        cameraZoomIndex = 0;
                         activeCamera = null;
                     }
                 } else {
                     //No active cameras found, set index to 0 to disable and go back to normal rendering.
-                    cameraIndex = 0;
-                    activeCamera = null;
-                    if (lastCameraMode != null && world.isClient() && InterfaceManager.clientInterface.getClientPlayer().equals(rider)) {
-                        InterfaceManager.clientInterface.setCameraMode(lastCameraMode);
-                        lastCameraMode = null;
-                    }
+                    clearActiveCamera();
                 }
             }
 
@@ -211,6 +209,34 @@ public abstract class AEntityB_Existing extends AEntityA_Base {
         }
 
         world.endProfiling();
+    }
+
+    protected void clearActiveCamera() {
+        cameraIndex = 0;
+        cameraZoomIndex = 0;
+        activeCamera = null;
+        activeCameraEntity = null;
+        activeCameraSwitchbox = null;
+        if (lastCameraMode != null && world.isClient() && InterfaceManager.clientInterface.getClientPlayer().equals(rider)) {
+            InterfaceManager.clientInterface.setCameraMode(lastCameraMode);
+            lastCameraMode = null;
+        }
+    }
+
+    public boolean changeCameraZoom(boolean zoomIn) {
+        if (cameraIndex > 0 && cameraIndex <= cameras.size()) {
+            JSONCameraObject selectedCamera = cameras.get(cameraIndex - 1);
+            if (selectedCamera.magnifications != null && !selectedCamera.magnifications.isEmpty()) {
+                if (zoomIn && cameraZoomIndex + 1 < selectedCamera.magnifications.size()) {
+                    ++cameraZoomIndex;
+                    return true;
+                } else if (!zoomIn && cameraZoomIndex > 0) {
+                    --cameraZoomIndex;
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     @Override
@@ -524,6 +550,7 @@ public abstract class AEntityB_Existing extends AEntityA_Base {
         if (!cameras.isEmpty()) {
             data.setInteger("zoomLevel", zoomLevel);
             data.setInteger("cameraIndex", cameraIndex);
+            data.setInteger("cameraZoomIndex", cameraZoomIndex);
         }
         return data;
     }

@@ -143,7 +143,7 @@ public class InterfaceEventsEntityRendering {
     @SubscribeEvent
     public static void onIVRenderOverlayPre(RenderGameOverlayEvent.Pre event) {
         //If we are rendering the custom camera overlay, block the crosshairs and the hotbar..
-        if ((event.getType() == RenderGameOverlayEvent.ElementType.CROSSHAIRS || event.getType() == RenderGameOverlayEvent.ElementType.HOTBAR) && CameraSystem.customCameraOverlay != null) {
+        if ((event.getType() == RenderGameOverlayEvent.ElementType.CROSSHAIRS || event.getType() == RenderGameOverlayEvent.ElementType.HOTBAR) && CameraSystem.isCustomCameraOverlayActive()) {
             event.setCanceled(true);
             return;
         }

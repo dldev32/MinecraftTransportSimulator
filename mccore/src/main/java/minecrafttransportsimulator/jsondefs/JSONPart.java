@@ -379,6 +379,9 @@ public class JSONPart extends AJSONPartProvider {
     }
 
     public static class JSONPartGun {
+        @JSONDescription("The name of the optical sight used by this gun.  This must match the name of a camera object whose cameraType is SIGHT.  If omitted, the gun will not make any sight camera available to its controlling seat.")
+        public String sightName;
+
         @JSONDescription("How a gun that has guided bullets determines if it has a lock.")
         public LockOnType lockOnType;
 

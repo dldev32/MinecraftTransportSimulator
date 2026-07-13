@@ -9,6 +9,7 @@ import minecrafttransportsimulator.baseclasses.ComputedVariable;
 import minecrafttransportsimulator.baseclasses.Point3D;
 import minecrafttransportsimulator.baseclasses.RotationMatrix;
 import minecrafttransportsimulator.entities.components.AEntityB_Existing;
+import minecrafttransportsimulator.entities.components.AEntityD_Definable;
 import minecrafttransportsimulator.entities.components.AEntityF_Multipart;
 import minecrafttransportsimulator.guis.components.AGUIBase;
 import minecrafttransportsimulator.guis.instances.GUIHUD;
@@ -17,6 +18,7 @@ import minecrafttransportsimulator.guis.instances.GUIRadio;
 import minecrafttransportsimulator.items.instances.ItemPartGun;
 import minecrafttransportsimulator.items.instances.ItemPartSeat;
 import minecrafttransportsimulator.jsondefs.JSONCameraObject;
+import minecrafttransportsimulator.jsondefs.JSONCameraObject.CameraType;
 import minecrafttransportsimulator.jsondefs.JSONPartDefinition;
 import minecrafttransportsimulator.jsondefs.JSONPotionEffect;
 import minecrafttransportsimulator.mcinterface.IWrapperEntity;
@@ -44,11 +46,17 @@ public final class PartSeat extends APart {
     public int gunGroupIndex;
     public int gunIndex;
     public final HashMap<ItemPartGun, List<PartGun>> gunGroups = new LinkedHashMap<>();
+    private final List<JSONCameraObject> standardCameras = new ArrayList<>();
+    private final List<AEntityD_Definable<?>> standardCameraEntities = new ArrayList<>();
+    private final List<JSONCameraObject> opticalCameras = new ArrayList<>();
+    private final List<AEntityD_Definable<?>> opticalCameraEntities = new ArrayList<>();
+    private boolean usingOptics;
 
     public PartSeat(AEntityF_Multipart<?> entityOn, IWrapperPlayer placingPlayer, JSONPartDefinition placementDefinition, ItemPartSeat item, IWrapperNBT data) {
         super(entityOn, placingPlayer, placementDefinition, item, data);
         if (data != null) {
             this.activeGunItem = PackParser.getItem(data.getString("activeGunPackID"), data.getString("activeGunSystemName"), data.getString("activeGunSubName"));
+            this.usingOptics = data.getBoolean("usingOptics");
         }
     }
 
@@ -110,6 +118,7 @@ public final class PartSeat extends APart {
     @Override
     public void updatePartList() {
         super.updatePartList();
+        JSONCameraObject selectedCamera = cameraIndex > 0 && cameraIndex <= cameras.size() ? cameras.get(cameraIndex - 1) : null;
 
         //Update gun list, this is grouped by the specific gun.
         List<PartGun> gunList = new ArrayList<>();
@@ -142,21 +151,61 @@ public final class PartSeat extends APart {
         gunGroupIndex = 0;
 
         //Populate camera list.
-        cameras.clear();
-        cameraEntities.clear();
+        standardCameras.clear();
+        standardCameraEntities.clear();
+        opticalCameras.clear();
+        opticalCameraEntities.clear();
         if (masterEntity.definition.rendering != null && masterEntity.definition.rendering.cameraObjects != null) {
             for (JSONCameraObject camera : masterEntity.definition.rendering.cameraObjects) {
-                cameras.add(camera);
-                cameraEntities.add(masterEntity);
+                addCamera(camera, masterEntity);
             }
         }
         for (APart part : masterEntity.allParts) {
             if (part.definition.rendering != null && part.definition.rendering.cameraObjects != null) {
                 for (JSONCameraObject camera : part.definition.rendering.cameraObjects) {
-                    cameras.add(camera);
-                    cameraEntities.add(part);
+                    addCamera(camera, part);
                 }
             }
+        }
+        rebuildCameraList(selectedCamera);
+    }
+
+    private void addCamera(JSONCameraObject camera, AEntityD_Definable<?> cameraEntity) {
+        if (camera.isOptical()) {
+            opticalCameras.add(camera);
+            opticalCameraEntities.add(cameraEntity);
+        } else {
+            standardCameras.add(camera);
+            standardCameraEntities.add(cameraEntity);
+        }
+    }
+
+    private void rebuildCameraList(JSONCameraObject selectedCamera) {
+        int previousCameraIndex = cameraIndex;
+        cameras.clear();
+        cameraEntities.clear();
+        if (usingOptics) {
+            for (int i = 0; i < opticalCameras.size(); ++i) {
+                JSONCameraObject camera = opticalCameras.get(i);
+                if (camera.cameraType == CameraType.TRIPLEX || (activeGunItem != null && activeGunItem.definition.gun.sightName != null && activeGunItem.definition.gun.sightName.equals(camera.name))) {
+                    cameras.add(camera);
+                    cameraEntities.add(opticalCameraEntities.get(i));
+                }
+            }
+        } else {
+            cameras.addAll(standardCameras);
+            cameraEntities.addAll(standardCameraEntities);
+        }
+
+        if (selectedCamera != null) {
+            int newCameraIndex = cameras.indexOf(selectedCamera);
+            if (newCameraIndex >= 0) {
+                cameraIndex = newCameraIndex + 1;
+            } else {
+                clearActiveCamera();
+            }
+        } else if (previousCameraIndex > cameras.size()) {
+            clearActiveCamera();
         }
     }
 
@@ -411,12 +460,13 @@ public final class PartSeat extends APart {
      * see if this rider can control them.  If so, then the active gun is set to that gun type.
      */
     public void setNextActiveGun() {
+        ItemPartGun previousGunItem = activeGunItem;
         //If we don't have an active gun, just get the next possible unit.
         if (activeGunItem == null) {
             for (ItemPartGun gunItem : gunGroups.keySet()) {
                 activeGunItem = gunItem;
                 gunIndex = 0;
-                return;
+                break;
             }
         } else {
             //If we didn't find an active gun, try to get another one.
@@ -425,6 +475,62 @@ public final class PartSeat extends APart {
             activeGunItem = getNextActiveGun();
             gunGroupIndex = 0;
         }
+        if (previousGunItem != activeGunItem && usingOptics) {
+            clearActiveCamera();
+            rebuildCameraList(null);
+        }
+    }
+
+    public void setNextCamera() {
+        if (usingOptics) {
+            clearActiveCamera();
+            usingOptics = false;
+            rebuildCameraList(null);
+        }
+        advanceCamera();
+    }
+
+    public void setNextOptic() {
+        if (!usingOptics) {
+            clearActiveCamera();
+            usingOptics = true;
+            rebuildCameraList(null);
+        }
+        advanceCamera();
+    }
+
+    private void advanceCamera() {
+        cameraZoomIndex = 0;
+        if (!cameras.isEmpty()) {
+            ++cameraIndex;
+        } else {
+            clearActiveCamera();
+        }
+    }
+
+    public boolean zoomIn() {
+        JSONCameraObject selectedCamera = getSelectedCamera();
+        if (usingOptics && selectedCamera != null) {
+            return changeCameraZoom(true);
+        } else if (zoomLevel > 0) {
+            --zoomLevel;
+            return true;
+        }
+        return false;
+    }
+
+    public boolean zoomOut() {
+        JSONCameraObject selectedCamera = getSelectedCamera();
+        if (usingOptics && selectedCamera != null) {
+            return changeCameraZoom(false);
+        } else {
+            ++zoomLevel;
+            return true;
+        }
+    }
+
+    private JSONCameraObject getSelectedCamera() {
+        return cameraIndex > 0 && cameraIndex <= cameras.size() ? cameras.get(cameraIndex - 1) : null;
     }
 
     /**
@@ -490,6 +596,7 @@ public final class PartSeat extends APart {
             data.setString("activeGunSystemName", activeGunItem.definition.systemName);
             data.setString("activeGunSubName", activeGunItem.subDefinition.subName);
         }
+        data.setBoolean("usingOptics", usingOptics);
         return data;
     }
 }

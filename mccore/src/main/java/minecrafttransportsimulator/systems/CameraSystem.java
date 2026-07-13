@@ -37,6 +37,8 @@ public class CameraSystem {
     private static float currentFOV;
     private static float currentMouseSensitivity;
     public static String customCameraOverlay;
+    public static String customCameraReticle;
+    public static float customCameraReticleScale = 1.0F;
 
     private static final double GROUND_VEHICLE_CAMERA_Y_OFFSET = 4.5D;
     private static final double CAMERA_COLLISION_PADDING = 0.25D;
@@ -74,6 +76,8 @@ public class CameraSystem {
             nightVisionEnabled = false;
         }
         customCameraOverlay = null;
+        customCameraReticle = null;
+        customCameraReticleScale = 1.0F;
         activeCamera = null;
 
         //Do custom camera operations, if we have one.
@@ -84,13 +88,17 @@ public class CameraSystem {
 
                 //Set current overlay for future calls.
                 customCameraOverlay = activeCamera.overlay != null ? activeCamera.overlay + ".png" : null;
+                customCameraReticle = activeCamera.reticle != null ? activeCamera.reticle + ".png" : null;
+                customCameraReticleScale = activeCamera.getReticleScale(cameraProvider.cameraZoomIndex);
 
-                //If the camera has an FOV override, apply it.
-                if (activeCamera.fovOverride != 0) {
+                //If the camera has an FOV override or magnification, apply it.
+                float magnification = activeCamera.getMagnification(cameraProvider.cameraZoomIndex);
+                if (activeCamera.fovOverride != 0 || magnification != 1.0F) {
                     if (currentFOV == 0) {
                         currentFOV = InterfaceManager.clientInterface.getFOV();
                     }
-                    InterfaceManager.clientInterface.setFOV(activeCamera.fovOverride);
+                    float baseFOV = activeCamera.fovOverride != 0 ? activeCamera.fovOverride : currentFOV;
+                    InterfaceManager.clientInterface.setFOV(getMagnifiedFOV(baseFOV, magnification));
                 }
 
                 //If the camera has a mouse sensitivity override, apply it.
@@ -241,6 +249,15 @@ public class CameraSystem {
             InterfaceManager.clientInterface.setMouseSensitivity(currentMouseSensitivity);
             currentMouseSensitivity = 0;
         }
+    }
+
+    public static boolean isCustomCameraOverlayActive() {
+        return customCameraOverlay != null || customCameraReticle != null;
+    }
+
+    private static float getMagnifiedFOV(float baseFOV, float magnification) {
+        double halfFOVRadians = Math.toRadians(Math.max(1.0F, Math.min(baseFOV, 179.0F))) / 2.0D;
+        return (float) Math.toDegrees(2.0D * Math.atan(Math.tan(halfFOVRadians) / Math.max(magnification, 0.01F)));
     }
 
     public static enum CameraMode{

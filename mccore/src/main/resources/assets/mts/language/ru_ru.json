@@ -440,6 +440,7 @@
     "input.gun_fire": "Огонь",
     "input.gun_switch": "Сменить оружие",
     "input.gun.reload": "Перезарядить оружие",
+    "input.optics_switch": "Переключить оптику",
     "input.radio": "Радио",
     "input.zoom_i": "Приблизить",
     "input.zoom_o": "Отдалить",

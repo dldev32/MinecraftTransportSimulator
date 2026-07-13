@@ -129,7 +129,7 @@ public class GUIHUD extends AGUIBase {
         //Set all instrument invisible if we're not rendering the main HUD.
         //Otherwise, set them all visible.
         for (GUIComponentInstrument instrument : instruments) {
-            instrument.visible = CameraSystem.customCameraOverlay == null && seat.placementDefinition.isController && (InterfaceManager.clientInterface.getCameraMode() == CameraMode.FIRST_PERSON ? ConfigSystem.client.renderingSettings.renderHUD_1P.value : ConfigSystem.client.renderingSettings.renderHUD_3P.value);
+            instrument.visible = !CameraSystem.isCustomCameraOverlayActive() && seat.placementDefinition.isController && (InterfaceManager.clientInterface.getCameraMode() == CameraMode.FIRST_PERSON ? ConfigSystem.client.renderingSettings.renderHUD_1P.value : ConfigSystem.client.renderingSettings.renderHUD_3P.value);
         }
 
         //Set health label text and visibility.
@@ -153,7 +153,7 @@ public class GUIHUD extends AGUIBase {
 
     @Override
     protected boolean renderBackground() {
-        return CameraSystem.customCameraOverlay == null && seat.placementDefinition.isController && (InterfaceManager.clientInterface.getCameraMode() == CameraMode.FIRST_PERSON ? (ConfigSystem.client.renderingSettings.renderHUD_1P.value && !ConfigSystem.client.renderingSettings.transpHUD_1P.value) : (ConfigSystem.client.renderingSettings.renderHUD_3P.value && !ConfigSystem.client.renderingSettings.transpHUD_3P.value));
+        return !CameraSystem.isCustomCameraOverlayActive() && seat.placementDefinition.isController && (InterfaceManager.clientInterface.getCameraMode() == CameraMode.FIRST_PERSON ? (ConfigSystem.client.renderingSettings.renderHUD_1P.value && !ConfigSystem.client.renderingSettings.transpHUD_1P.value) : (ConfigSystem.client.renderingSettings.renderHUD_3P.value && !ConfigSystem.client.renderingSettings.transpHUD_3P.value));
     }
 
     @Override

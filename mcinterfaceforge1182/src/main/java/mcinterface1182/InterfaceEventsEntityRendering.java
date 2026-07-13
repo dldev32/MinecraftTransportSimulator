@@ -88,7 +88,7 @@ public class InterfaceEventsEntityRendering {
     @SubscribeEvent
     public static void onIVPreLayer(PreLayer event) {
         //If we are rendering the custom camera overlay, block the crosshairs and the hotbar.
-        if ((event.getOverlay() == ForgeIngameGui.CROSSHAIR_ELEMENT || event.getOverlay() == ForgeIngameGui.HOTBAR_ELEMENT) && CameraSystem.customCameraOverlay != null) {
+        if ((event.getOverlay() == ForgeIngameGui.CROSSHAIR_ELEMENT || event.getOverlay() == ForgeIngameGui.HOTBAR_ELEMENT) && CameraSystem.isCustomCameraOverlayActive()) {
             event.setCanceled(true);
             return;
         }
