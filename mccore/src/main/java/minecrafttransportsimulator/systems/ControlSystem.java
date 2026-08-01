@@ -115,7 +115,6 @@ public final class ControlSystem {
         resetMouseYoke();
         mouseYokeEnabledLastCall = enabled;
         if (displayMessage && InterfaceManager.clientInterface != null) {
-            InterfaceManager.clientInterface.displayOverlayMessage((enabled ? LanguageSystem.INTERACT_MOUSEYOKE_ENABLED : LanguageSystem.INTERACT_MOUSEYOKE_DISABLED).getCurrentValue());
         }
     }
 

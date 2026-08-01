@@ -13,6 +13,8 @@ import minecrafttransportsimulator.entities.instances.PartEngine;
 import minecrafttransportsimulator.entities.instances.PartGroundDevice;
 import minecrafttransportsimulator.entities.instances.PartGun;
 import minecrafttransportsimulator.entities.instances.PartInteractable;
+import minecrafttransportsimulator.jsondefs.JSONCollisionGroup;
+import minecrafttransportsimulator.rendering.RenderableData.LightingMode;
 import minecrafttransportsimulator.systems.DamageXRaySystem;
 import minecrafttransportsimulator.systems.DamageXRaySystem.Analysis;
 
@@ -53,13 +55,13 @@ public class GUIComponentDamageXRayEntity extends AGUIComponent {
     @Override
     public void render(AGUIBase gui, int mouseX, int mouseY, boolean renderBright, boolean renderLitTexture, boolean blendingEnabled, float partialTicks) {
         Analysis analysis = DamageXRaySystem.getActiveAnalysis();
-        if (analysis == null || analysis.targetEntity == null || !analysis.targetEntity.isValid) {
+        if (blendingEnabled || analysis == null || analysis.targetEntity == null || !analysis.targetEntity.isValid) {
             return;
         }
 
         setTargetFrame(analysis.targetEntity, partialTicks);
         double maxRadius = Math.max(analysis.targetEntity.encompassingBox.widthRadius, Math.max(analysis.targetEntity.encompassingBox.heightRadius, analysis.targetEntity.encompassingBox.depthRadius));
-        double modelScale = Math.min(width / Math.max(maxRadius * 2.35D, 1.0D), height / Math.max(maxRadius * 1.95D, 1.0D));
+        double modelScale = Math.min(width / Math.max(maxRadius * 2.35D, 1.0D), height / Math.max(maxRadius * 1.95D, 1.0D)) * analysis.getCameraZoom();
 
         GUIComponentDamageXRay.setViewRotation(analysis, viewRotation, flightVector);
         GUIComponentDamageXRay.setProjectileFocus(analysis, partialTicks, targetPosition, focusPosition);
@@ -71,38 +73,58 @@ public class GUIComponentDamageXRayEntity extends AGUIComponent {
 
         DamageXRaySystem.beginPerspectiveProjection(position.x + width / 2D, position.y - height / 2D - 5, getZOffset(), Math.max(width, height) * 1.35D);
         try {
-            if (blendingEnabled) {
-                DamageXRaySystem.beginModelRender(ColorRGB.WHITE, DamageXRaySystem.XRAY_MODEL_ALPHA * analysis.getAlpha(), true);
-                try {
-                    renderEntity(analysis.targetEntity, analysis.targetEntity, baseTransform, partialTicks, blendingEnabled, true, false);
-                    if (analysis.targetEntity instanceof AEntityF_Multipart) {
-                        for (APart part : ((AEntityF_Multipart<?>) analysis.targetEntity).allParts) {
-                            if (part.isValid && !isXRayModule(part)) {
-                                renderEntity(analysis.targetEntity, part, baseTransform, partialTicks, blendingEnabled, true, false);
-                            }
+            DamageXRaySystem.beginModelRender(DamageXRaySystem.XRAY_MODEL_COLOR, 1.0F, false, LightingMode.IGNORE_ALL_LIGHTING, -Math.max(width, height) * 2.0D);
+            try {
+                renderEntity(analysis.targetEntity, analysis.targetEntity, baseTransform, partialTicks, blendingEnabled, true, false, analysis);
+                if (analysis.targetEntity instanceof AEntityF_Multipart) {
+                    for (APart part : ((AEntityF_Multipart<?>) analysis.targetEntity).allParts) {
+                        if (part.isValid) {
+                            renderEntity(analysis.targetEntity, part, baseTransform, partialTicks, blendingEnabled, true, false, analysis);
                         }
                     }
-                } finally {
-                    DamageXRaySystem.endModelRender();
                 }
+            } finally {
+                DamageXRaySystem.endModelRender();
+            }
 
-                DamageXRaySystem.beginModelRender(DamageXRaySystem.XRAY_DETAIL_COLOR, DamageXRaySystem.XRAY_MODEL_ALPHA * analysis.getAlpha());
-                try {
-                    renderEntity(analysis.targetEntity, analysis.targetEntity, baseTransform, partialTicks, blendingEnabled, false, true);
-                    if (analysis.targetEntity instanceof AEntityF_Multipart) {
-                        for (APart part : ((AEntityF_Multipart<?>) analysis.targetEntity).allParts) {
-                            if (part.isValid) {
-                                renderEntity(analysis.targetEntity, part, baseTransform, partialTicks, blendingEnabled, isXRayModule(part), true);
-                            }
-                        }
+            if (analysis.targetEntity instanceof AEntityF_Multipart) {
+                for (APart part : ((AEntityF_Multipart<?>) analysis.targetEntity).allParts) {
+                    if (part.isValid && isXRayModule(part)) {
+                        renderDetailModel(analysis.targetEntity, part, baseTransform, partialTicks, blendingEnabled, analysis);
                     }
-                } finally {
-                    DamageXRaySystem.endModelRender();
+                }
+            }
+            renderEntity(analysis.targetEntity, analysis.targetEntity, baseTransform, partialTicks, blendingEnabled, false, true, analysis);
+            if (analysis.targetEntity instanceof AEntityF_Multipart) {
+                for (APart part : ((AEntityF_Multipart<?>) analysis.targetEntity).allParts) {
+                    if (part.isValid) {
+                        renderEntity(analysis.targetEntity, part, baseTransform, partialTicks, blendingEnabled, false, true, analysis);
+                    }
                 }
             }
         } finally {
             DamageXRaySystem.endPerspectiveProjection();
         }
+    }
+
+    private void renderDetailModel(AEntityE_Interactable<?> targetEntity, AEntityE_Interactable<?> entity, TransformationMatrix baseTransform, float partialTicks, boolean blendingEnabled, Analysis analysis) {
+        ColorRGB detailColor = getDetailColor(entity.damageVar.currentValue, entity.definition.general.health, analysis.isEntityDamageFlashActive(entity.uniqueUUID));
+        DamageXRaySystem.beginModelRender(detailColor, 1.0F, false, LightingMode.IGNORE_WORLD_LIGHTING, 0.0D);
+        try {
+            renderEntity(targetEntity, entity, baseTransform, partialTicks, blendingEnabled, true, false, analysis);
+        } finally {
+            DamageXRaySystem.endModelRender();
+        }
+    }
+
+    private static ColorRGB getDetailColor(double damage, double health, boolean damageFlashActive) {
+        if (damage <= 0.0D || health <= 0.0D) {
+            return damageFlashActive ? DamageXRaySystem.XRAY_DAMAGE_FLASH_COLOR : DamageXRaySystem.XRAY_DETAIL_COLOR;
+        }
+        if (damage >= health) {
+            return damageFlashActive ? DamageXRaySystem.XRAY_DESTROYED_FLASH_COLOR : DamageXRaySystem.XRAY_DESTROYED_COLOR;
+        }
+        return damageFlashActive ? DamageXRaySystem.XRAY_DAMAGED_FLASH_COLOR : DamageXRaySystem.XRAY_DAMAGED_COLOR;
     }
 
     private static boolean isXRayModule(APart part) {
@@ -120,7 +142,7 @@ public class GUIComponentDamageXRayEntity extends AGUIComponent {
         return false;
     }
 
-    private void renderEntity(AEntityE_Interactable<?> targetEntity, AEntityE_Interactable<?> entity, TransformationMatrix baseTransform, float partialTicks, boolean blendingEnabled, boolean renderModel, boolean renderHealthBoxes) {
+    private void renderEntity(AEntityE_Interactable<?> targetEntity, AEntityE_Interactable<?> entity, TransformationMatrix baseTransform, float partialTicks, boolean blendingEnabled, boolean renderModel, boolean renderHealthBoxes, Analysis analysis) {
         entityTransform.set(baseTransform);
         if (entity == targetEntity) {
             entityPosition.set(targetPosition);
@@ -138,21 +160,46 @@ public class GUIComponentDamageXRayEntity extends AGUIComponent {
             entity.renderModelWithTransform(entityTransform, blendingEnabled, partialTicks);
         }
         if (renderHealthBoxes) {
-            renderHealthBoxes(entity);
+            renderHealthBoxes(entity, analysis);
         }
     }
 
-    private void renderHealthBoxes(AEntityE_Interactable<?> entity) {
-        for (BoundingBox box : entity.collisionBoxes) {
-            if (box.groupDef != null && box.groupDef.health != 0) {
-                healthBoxOffset.set(box.globalCenter).subtract(entityPosition).reOrigin(entityOrientation);
-                healthBoxOffset.x /= Math.max(Math.abs(interpolatedScale.x), 0.001D);
-                healthBoxOffset.y /= Math.max(Math.abs(interpolatedScale.y), 0.001D);
-                healthBoxOffset.z /= Math.max(Math.abs(interpolatedScale.z), 0.001D);
-                healthBoxRenderBounds.widthRadius = box.widthRadius / Math.max(Math.abs(interpolatedScale.x), 0.001D);
-                healthBoxRenderBounds.heightRadius = box.heightRadius / Math.max(Math.abs(interpolatedScale.y), 0.001D);
-                healthBoxRenderBounds.depthRadius = box.depthRadius / Math.max(Math.abs(interpolatedScale.z), 0.001D);
-                healthBoxRenderBounds.renderHolographic(entityTransform, healthBoxOffset, DamageXRaySystem.XRAY_DETAIL_COLOR);
+    private void renderHealthBoxes(AEntityE_Interactable<?> entity, Analysis analysis) {
+        if (entity.definition.collisionGroups == null) {
+            return;
+        }
+        for (int groupIndex = 0; groupIndex < entity.definition.collisionGroups.size(); ++groupIndex) {
+            JSONCollisionGroup group = entity.definition.collisionGroups.get(groupIndex);
+            if (group.health <= 0 || groupIndex >= entity.definitionCollisionBoxes.size()) {
+                continue;
+            }
+            double damage = entity.getOrCreateVariable("collision_" + (groupIndex + 1) + "_damage").currentValue;
+            boolean destroyed = damage >= group.health;
+            ColorRGB detailColor = getDetailColor(damage, group.health, analysis.isCollisionDamageFlashActive(entity.uniqueUUID, groupIndex + 1));
+            DamageXRaySystem.beginModelRender(detailColor, 1.0F, false, LightingMode.IGNORE_WORLD_LIGHTING, 0.0D);
+            try {
+                for (BoundingBox box : entity.definitionCollisionBoxes.get(groupIndex)) {
+                    if (!destroyed && !entity.collisionBoxes.contains(box)) {
+                        continue;
+                    }
+                    if (destroyed) {
+                        healthBoxOffset.set(box.localCenter);
+                        healthBoxRenderBounds.widthRadius = box.definition.width / 2.0D;
+                        healthBoxRenderBounds.heightRadius = box.definition.height / 2.0D;
+                        healthBoxRenderBounds.depthRadius = box.definition.width / 2.0D;
+                    } else {
+                        healthBoxOffset.set(box.globalCenter).subtract(entityPosition).reOrigin(entityOrientation);
+                        healthBoxOffset.x /= Math.max(Math.abs(interpolatedScale.x), 0.001D);
+                        healthBoxOffset.y /= Math.max(Math.abs(interpolatedScale.y), 0.001D);
+                        healthBoxOffset.z /= Math.max(Math.abs(interpolatedScale.z), 0.001D);
+                        healthBoxRenderBounds.widthRadius = box.widthRadius / Math.max(Math.abs(interpolatedScale.x), 0.001D);
+                        healthBoxRenderBounds.heightRadius = box.heightRadius / Math.max(Math.abs(interpolatedScale.y), 0.001D);
+                        healthBoxRenderBounds.depthRadius = box.depthRadius / Math.max(Math.abs(interpolatedScale.z), 0.001D);
+                    }
+                    healthBoxRenderBounds.renderHolographic(entityTransform, healthBoxOffset, detailColor);
+                }
+            } finally {
+                DamageXRaySystem.endModelRender();
             }
         }
     }

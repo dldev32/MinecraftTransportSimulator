@@ -41,6 +41,7 @@ public class BoundingBox {
     public final List<Point3D> collidingBlockPositions = new ArrayList<>();
     private RenderableData wireframeRenderable;
     private RenderableData holographicRenderable;
+    private RenderableData damageXRayRenderable;
     private final Point3D tempGlobalCenter;
 
     public double widthRadius;
@@ -333,19 +334,31 @@ public class BoundingBox {
      * nicely with the current matrix sate.
      */
     public void renderHolographic(TransformationMatrix transform, Point3D offset, ColorRGB color) {
-        if (holographicRenderable == null) {
-            holographicRenderable = new RenderableData(new RenderableVertices(true), "mts:textures/rendering/holobox.png");
-            holographicRenderable.setLightMode(LightingMode.IGNORE_ALL_LIGHTING);
-        }
         boolean renderingDamageXRay = DamageXRaySystem.isRenderingXRayModel();
-        holographicRenderable.setTexture(renderingDamageXRay ? DamageXRaySystem.XRAY_SOLID_TEXTURE : "mts:textures/rendering/holobox.png");
-        holographicRenderable.setAlpha(renderingDamageXRay ? DamageXRaySystem.getActiveModelRenderAlpha() : 1.0F);
-        holographicRenderable.transform.set(transform);
-        if (offset != null) {
-            holographicRenderable.transform.applyTranslation(offset);
+        RenderableData activeRenderable;
+        if (renderingDamageXRay) {
+            if (damageXRayRenderable == null) {
+                RenderableVertices boxVertices = new RenderableVertices(true);
+                damageXRayRenderable = new RenderableData(new RenderableVertices("BOX_XRAY", boxVertices.vertices, false), DamageXRaySystem.XRAY_SOLID_TEXTURE);
+            }
+            activeRenderable = damageXRayRenderable;
+            activeRenderable.setAlpha(DamageXRaySystem.getActiveModelRenderAlpha());
+            activeRenderable.setColor(DamageXRaySystem.getActiveModelRenderColor());
+            activeRenderable.setLightMode(DamageXRaySystem.getActiveModelRenderLightingMode());
+        } else {
+            if (holographicRenderable == null) {
+                holographicRenderable = new RenderableData(new RenderableVertices(true), "mts:textures/rendering/holobox.png");
+                holographicRenderable.setLightMode(LightingMode.IGNORE_ALL_LIGHTING);
+            }
+            activeRenderable = holographicRenderable;
+            activeRenderable.setAlpha(1.0F);
+            activeRenderable.setColor(color);
         }
-        holographicRenderable.setColor(renderingDamageXRay ? DamageXRaySystem.getActiveModelRenderColor() : color);
-        holographicRenderable.setBoxBounds(this, false);
-        holographicRenderable.render();
+        activeRenderable.transform.set(transform);
+        if (offset != null) {
+            activeRenderable.transform.applyTranslation(offset);
+        }
+        activeRenderable.setBoxBounds(this, false);
+        activeRenderable.render();
     }
 }

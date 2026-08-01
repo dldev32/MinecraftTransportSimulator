@@ -250,7 +250,8 @@ public class GUIComponentDamageXRay extends AGUIComponent {
         double targetY = analysis.targetEntity.prevPosition.y + (analysis.targetEntity.position.y - analysis.targetEntity.prevPosition.y) * partialTicks;
         double targetZ = analysis.targetEntity.prevPosition.z + (analysis.targetEntity.position.z - analysis.targetEntity.prevPosition.z) * partialTicks;
         targetPosition.set(targetX, targetY, targetZ);
-        focusPosition.set(analysis.startPosition).interpolate(analysis.endPosition, analysis.getFocusProgress()).subtract(targetPosition).reOrigin(analysis.targetEntity.orientation);
+        double focusProgress = analysis.impactProgress > 0.0D ? analysis.getFocusProgress() / analysis.impactProgress : 1.0D;
+        focusPosition.set(analysis.startPosition).interpolate(analysis.impactPosition, focusProgress).subtract(targetPosition).reOrigin(analysis.targetEntity.orientation);
     }
 
     public static void projectPathPoint(Analysis analysis, Point3D worldPoint, float partialTicks, int width, int height, RotationMatrix viewRotation, Point3D targetPosition, Point3D focusPosition, Point3D projectedPoint) {
@@ -261,7 +262,7 @@ public class GUIComponentDamageXRay extends AGUIComponent {
         projectedPoint.set(worldPoint).subtract(targetPosition).reOrigin(analysis.targetEntity.orientation).subtract(focusPosition).rotate(viewRotation);
 
         double maxRadius = Math.max(analysis.targetEntity.encompassingBox.widthRadius, Math.max(analysis.targetEntity.encompassingBox.heightRadius, analysis.targetEntity.encompassingBox.depthRadius));
-        double scale = Math.min(width / Math.max(maxRadius * 2.7D, 1.0D), height / Math.max(maxRadius * 2.2D, 1.0D));
+        double scale = Math.min(width / Math.max(maxRadius * 2.7D, 1.0D), height / Math.max(maxRadius * 2.2D, 1.0D)) * analysis.getCameraZoom();
         double depth = projectedPoint.z * scale;
         double cameraDistance = Math.max(width, height) * 1.35D;
         double perspective = cameraDistance / Math.max(cameraDistance - depth, cameraDistance * 0.30D);

@@ -23,23 +23,21 @@ public class PacketEntityBulletHitXRay extends APacketBase {
     private final int bulletNumber;
     private final String bulletName;
     private final String targetName;
-    private final String bulletModelLocation;
-    private final String bulletTextureLocation;
+    private final float bulletDiameter;
     private final Point3D startPosition;
     private final Point3D endPosition;
     private final ResultType resultType;
     private final List<HitEvent> hitEvents;
     private final List<FragmentEvent> fragmentEvents;
 
-    public PacketEntityBulletHitXRay(AEntityE_Interactable<?> targetEntity, UUID gunID, int bulletNumber, String bulletName, String targetName, String bulletModelLocation, String bulletTextureLocation, Point3D startPosition, Point3D endPosition, ResultType resultType, List<HitEvent> hitEvents, List<FragmentEvent> fragmentEvents) {
+    public PacketEntityBulletHitXRay(AEntityE_Interactable<?> targetEntity, UUID gunID, int bulletNumber, String bulletName, String targetName, float bulletDiameter, Point3D startPosition, Point3D endPosition, ResultType resultType, List<HitEvent> hitEvents, List<FragmentEvent> fragmentEvents) {
         super(null);
         this.targetID = targetEntity.uniqueUUID;
         this.gunID = gunID;
         this.bulletNumber = bulletNumber;
         this.bulletName = bulletName;
         this.targetName = targetName;
-        this.bulletModelLocation = bulletModelLocation;
-        this.bulletTextureLocation = bulletTextureLocation;
+        this.bulletDiameter = bulletDiameter;
         this.startPosition = startPosition;
         this.endPosition = endPosition;
         this.resultType = resultType;
@@ -54,8 +52,7 @@ public class PacketEntityBulletHitXRay extends APacketBase {
         this.bulletNumber = buf.readInt();
         this.bulletName = readStringFromBuffer(buf);
         this.targetName = readStringFromBuffer(buf);
-        this.bulletModelLocation = readStringFromBuffer(buf);
-        this.bulletTextureLocation = readStringFromBuffer(buf);
+        this.bulletDiameter = buf.readFloat();
         this.startPosition = readPoint3dFromBuffer(buf);
         this.endPosition = readPoint3dFromBuffer(buf);
         this.resultType = ResultType.values()[buf.readByte()];
@@ -63,6 +60,7 @@ public class PacketEntityBulletHitXRay extends APacketBase {
         this.hitEvents = new ArrayList<>();
         for (int i = 0; i < eventCount; ++i) {
             Point3D hitPosition = readPoint3dFromBuffer(buf);
+            UUID componentID = readUUIDFromBuffer(buf);
             int groupIndex = buf.readInt();
             int boxIndex = buf.readInt();
             String componentName = readStringFromBuffer(buf);
@@ -74,7 +72,7 @@ public class PacketEntityBulletHitXRay extends APacketBase {
             boolean stopped = buf.readBoolean();
             boolean forwardedDamage = buf.readBoolean();
             if (i < DamageXRaySystem.MAX_EVENTS) {
-                hitEvents.add(new HitEvent(hitPosition, groupIndex, boxIndex, componentName, armorThickness, penetrationPotential, armorPenetrated, collisionDamage, entityDamage, stopped, forwardedDamage));
+                hitEvents.add(new HitEvent(hitPosition, componentID, groupIndex, boxIndex, componentName, armorThickness, penetrationPotential, armorPenetrated, collisionDamage, entityDamage, stopped, forwardedDamage));
             }
         }
         int fragmentEventCount = buf.readInt();
@@ -82,8 +80,9 @@ public class PacketEntityBulletHitXRay extends APacketBase {
         for (int i = 0; i < fragmentEventCount; ++i) {
             Point3D fragmentStartPosition = readPoint3dFromBuffer(buf);
             Point3D fragmentEndPosition = readPoint3dFromBuffer(buf);
+            UUID componentID = buf.readBoolean() ? readUUIDFromBuffer(buf) : null;
             if (i < DamageXRaySystem.MAX_FRAGMENT_EVENTS) {
-                fragmentEvents.add(new FragmentEvent(fragmentStartPosition, fragmentEndPosition));
+                fragmentEvents.add(new FragmentEvent(fragmentStartPosition, fragmentEndPosition, componentID));
             }
         }
     }
@@ -96,8 +95,7 @@ public class PacketEntityBulletHitXRay extends APacketBase {
         buf.writeInt(bulletNumber);
         writeStringToBuffer(bulletName, buf);
         writeStringToBuffer(targetName, buf);
-        writeStringToBuffer(bulletModelLocation != null ? bulletModelLocation : "", buf);
-        writeStringToBuffer(bulletTextureLocation != null ? bulletTextureLocation : "", buf);
+        buf.writeFloat(bulletDiameter);
         writePoint3dToBuffer(startPosition, buf);
         writePoint3dToBuffer(endPosition, buf);
         buf.writeByte(resultType.ordinal());
@@ -106,6 +104,7 @@ public class PacketEntityBulletHitXRay extends APacketBase {
         for (int i = 0; i < eventCount; ++i) {
             HitEvent event = hitEvents.get(i);
             writePoint3dToBuffer(event.hitPosition, buf);
+            writeUUIDToBuffer(event.componentID, buf);
             buf.writeInt(event.groupIndex);
             buf.writeInt(event.boxIndex);
             writeStringToBuffer(event.componentName != null ? event.componentName : "", buf);
@@ -123,12 +122,16 @@ public class PacketEntityBulletHitXRay extends APacketBase {
             FragmentEvent event = fragmentEvents.get(i);
             writePoint3dToBuffer(event.startPosition, buf);
             writePoint3dToBuffer(event.endPosition, buf);
+            buf.writeBoolean(event.componentID != null);
+            if (event.componentID != null) {
+                writeUUIDToBuffer(event.componentID, buf);
+            }
         }
     }
 
     @Override
     public void handle(AWrapperWorld world) {
         AEntityE_Interactable<?> targetEntity = world.getEntity(targetID);
-        DamageXRaySystem.displayAnalysis(targetEntity, gunID, bulletNumber, bulletName, targetName, bulletModelLocation.isEmpty() ? null : bulletModelLocation, bulletTextureLocation.isEmpty() ? null : bulletTextureLocation, startPosition, endPosition, resultType, hitEvents, fragmentEvents);
+        DamageXRaySystem.displayAnalysis(targetEntity, gunID, bulletNumber, bulletName, targetName, bulletDiameter, startPosition, endPosition, resultType, hitEvents, fragmentEvents);
     }
 }

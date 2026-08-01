@@ -11,6 +11,7 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.UUID;
 
 import minecrafttransportsimulator.baseclasses.AnimationSwitchbox;
 import minecrafttransportsimulator.baseclasses.BoundingBox;
@@ -452,9 +453,9 @@ public abstract class AEntityF_Multipart<JSONDefinition extends AJSONPartProvide
                             }
 
                             if (fragBoxHit != null && (fragEntityHitPosition == null || fragStart.isFirstCloserThanSecond(fragBoxHit.position, fragEntityHitPosition))) {
-                                recordXRayFragment(xrayFragments, fragStart, fragBoxHit.position);
                                 APart fragHitPart = getPartWithBox(fragBoxHit.box);
                                 AEntityF_Multipart<?> fragHitEntity = fragHitPart != null ? fragHitPart : this;
+                                recordXRayFragment(xrayFragments, fragStart, fragBoxHit.position, fragHitEntity.uniqueUUID);
                                 Damage fragDamage = new Damage(fragDmg, fragBoxHit.box, bullet.gun, bullet.gun.lastController, null);
                                 fragDamage.ignoreCooldown = true;
                                 if (world.isClient()) {
@@ -551,8 +552,12 @@ public abstract class AEntityF_Multipart<JSONDefinition extends AJSONPartProvide
     }
 
     private void recordXRayFragment(List<FragmentEvent> xrayFragments, Point3D startPosition, Point3D endPosition) {
+        recordXRayFragment(xrayFragments, startPosition, endPosition, null);
+    }
+
+    private void recordXRayFragment(List<FragmentEvent> xrayFragments, Point3D startPosition, Point3D endPosition, UUID componentID) {
         if (xrayFragments != null && xrayFragments.size() < DamageXRaySystem.MAX_FRAGMENT_EVENTS) {
-            xrayFragments.add(new FragmentEvent(startPosition, endPosition));
+            xrayFragments.add(new FragmentEvent(startPosition, endPosition, componentID));
         }
     }
 
@@ -563,7 +568,7 @@ public abstract class AEntityF_Multipart<JSONDefinition extends AJSONPartProvide
             if (groupIndex > 0 && hitEntity.definitionCollisionBoxes.size() >= groupIndex) {
                 boxIndex = hitEntity.definitionCollisionBoxes.get(groupIndex - 1).indexOf(hitEntry.box) + 1;
             }
-            xrayEvents.add(new HitEvent(hitEntry.position, groupIndex, boxIndex, getXRayEntityName(hitEntity), armorThickness, penetrationPotential, armorPenetrated, collisionDamage, entityDamage, stopped, forwardedDamage));
+            xrayEvents.add(new HitEvent(hitEntry.position, hitEntity.uniqueUUID, groupIndex, boxIndex, getXRayEntityName(hitEntity), armorThickness, penetrationPotential, armorPenetrated, collisionDamage, entityDamage, stopped, forwardedDamage));
         }
     }
 
@@ -571,8 +576,6 @@ public abstract class AEntityF_Multipart<JSONDefinition extends AJSONPartProvide
         if (targetEntity != null && bullet != null && xrayEvents != null && !xrayEvents.isEmpty()) {
             String bulletName = bullet.gun.lastLoadedBullet != null ? bullet.gun.lastLoadedBullet.getItemName() : bullet.definition.systemName;
             String targetName = getXRayEntityName(targetEntity);
-            String bulletModelLocation = bullet.definition.getModelLocation(bullet.subDefinition);
-            String bulletTextureLocation = bullet.getTexture();
             Point3D displayStartPosition = startPosition.copy();
             Point3D flightDirection = bullet.motion.copy().normalize();
             if (flightDirection.length() > 0) {
@@ -580,9 +583,9 @@ public abstract class AEntityF_Multipart<JSONDefinition extends AJSONPartProvide
                 displayStartPosition.subtract(flightDirection.scale(leadDistance));
             }
             if (world.isClient()) {
-                DamageXRaySystem.displayAnalysis(targetEntity, bullet.gun.uniqueUUID, bullet.bulletNumber, bulletName, targetName, bulletModelLocation, bulletTextureLocation, displayStartPosition, endPosition, resultType, xrayEvents, xrayFragments);
+                DamageXRaySystem.displayAnalysis(targetEntity, bullet.gun.uniqueUUID, bullet.bulletNumber, bulletName, targetName, bullet.definition.bullet.diameter, displayStartPosition, endPosition, resultType, xrayEvents, xrayFragments);
             } else {
-                InterfaceManager.packetInterface.sendToAllClients(new PacketEntityBulletHitXRay(targetEntity, bullet.gun.uniqueUUID, bullet.bulletNumber, bulletName, targetName, bulletModelLocation, bulletTextureLocation, displayStartPosition, endPosition, resultType, xrayEvents, xrayFragments));
+                InterfaceManager.packetInterface.sendToAllClients(new PacketEntityBulletHitXRay(targetEntity, bullet.gun.uniqueUUID, bullet.bulletNumber, bulletName, targetName, bullet.definition.bullet.diameter, displayStartPosition, endPosition, resultType, xrayEvents, xrayFragments));
             }
         }
     }

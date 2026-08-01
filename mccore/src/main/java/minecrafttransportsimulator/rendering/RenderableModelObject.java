@@ -231,11 +231,14 @@ public class RenderableModelObject {
                     renderAlpha = (float) ((switchbox.lastVisibilityValue - switchbox.lastVisibilityClock.animation.clampMin) / (switchbox.lastVisibilityClock.animation.clampMax - switchbox.lastVisibilityClock.animation.clampMin));
                 }
             }
-            renderable.setAlpha(renderingDamageXRay ? renderAlpha * DamageXRaySystem.getActiveModelRenderAlpha() : renderAlpha);
+            if (renderingDamageXRay && renderAlpha == 0.0F) {
+                return;
+            }
+            renderable.setAlpha(renderingDamageXRay ? DamageXRaySystem.getActiveModelRenderAlpha() : renderAlpha);
             renderable.setColor(renderingDamageXRay ? DamageXRaySystem.getActiveModelRenderColor() : ColorRGB.WHITE);
 
             //If we aren't on the right pass for our main object, and we don't have lights, skip further calcs.
-            if (renderable.isTranslucent != blendingEnabled && lightDef == null) {
+            if (!renderingDamageXRay && renderable.isTranslucent != blendingEnabled && lightDef == null) {
                 return;
             }
 
@@ -270,14 +273,19 @@ public class RenderableModelObject {
             if (treadPoints != null) {
                 //Active tread.  Do tread-path rendering instead of normal model.
                 renderable.setLightValue(entity.worldLightValue);
+                renderable.setLightMode(renderingDamageXRay ? DamageXRaySystem.getActiveModelRenderLightingMode() : LightingMode.NORMAL);
+                if (renderingDamageXRay) {
+                    renderable.setBlending(false);
+                }
                 doTreadRendering((PartGroundDevice) entity, partialTicks);
             } else {
                 //Set object states and render.
                 boolean isLitTexture = lightDef != null && lightLevel > 0 && !lightDef.emissive && !lightDef.isBeam;
-                if ((renderable.isTranslucent && blendingEnabled) || ((isLitTexture && !renderable.isTranslucent) ? (ConfigSystem.client.renderingSettings.lightsTransp.value == blendingEnabled) : (renderable.isTranslucent == blendingEnabled))) {
+                if (renderingDamageXRay || (renderable.isTranslucent && blendingEnabled) || ((isLitTexture && !renderable.isTranslucent) ? (ConfigSystem.client.renderingSettings.lightsTransp.value == blendingEnabled) : (renderable.isTranslucent == blendingEnabled))) {
                     if (renderingDamageXRay) {
                         renderable.setLightValue(entity.worldLightValue);
-                        renderable.setLightMode(LightingMode.IGNORE_ALL_LIGHTING);
+                        renderable.setLightMode(DamageXRaySystem.getActiveModelRenderLightingMode());
+                        renderable.setBlending(false);
                         renderable.render();
                     } else if (lightDef != null && lightDef.isBeam) {
                         //Model that's actually a beam, render it with beam lighting/blending. 
@@ -378,7 +386,7 @@ public class RenderableModelObject {
 
     private boolean shouldRender(AEntityD_Definable<?> entity, boolean blendingEnabled, float partialTicks) {
         //Block windows if we have them disabled.
-        if (isWindow && !ConfigSystem.client.renderingSettings.renderWindows.value) {
+        if (!DamageXRaySystem.isRenderingXRayModel() && isWindow && !ConfigSystem.client.renderingSettings.renderWindows.value) {
             return false;
         }
         //If we have a switchbox, run it once, and if it returns false for a non-blended object, don't render.
