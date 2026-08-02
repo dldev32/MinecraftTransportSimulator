@@ -996,6 +996,7 @@ public abstract class AEntityD_Definable<JSONDefinition extends AJSONMultiModelP
             case ("player_crafteditem"):
                 return new ComputedVariable(this, variable, partialTicks -> playerCraftedItem ? 1 : 0, false);
             case ("distance_client"):
+            case ("flyby"):
                 return new ComputedVariable(this, variable, partialTicks -> position.distanceTo(InterfaceManager.clientInterface.getClientPlayer().getPosition()), false);
             case ("orientation_client_x"):
                 return new ComputedVariable(this, variable, partialTicks -> InterfaceManager.clientInterface.getClientPlayer().getPosition().subtract(position).getAngles(true).x, false);

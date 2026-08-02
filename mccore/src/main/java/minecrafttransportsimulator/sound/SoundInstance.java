@@ -26,6 +26,7 @@ public class SoundInstance {
     public final JSONSound soundDef;
     public final EntityRadio radio;
     public final Point3D position;
+    private final boolean isPositionStatic;
 
     //Runtime variables.
     public int sourceIndex;
@@ -49,11 +50,18 @@ public class SoundInstance {
         this.soundName = soundName;
         this.soundPlayingName = soundDef != null && soundDef.soundVariations != null ? soundDef.soundVariations.get(soundRandom.nextInt(soundDef.soundVariations.size())) : soundName;
         this.radio = radio;
+        this.isPositionStatic = soundDef != null && soundDef.activeAnimations != null && soundDef.activeAnimations.stream().anyMatch(animation -> "flyby".equals(animation.variable));
         this.position = new Point3D();
-        updatePosition();
+        setPosition();
     }
 
     public void updatePosition() {
+        if (!isPositionStatic) {
+            setPosition();
+        }
+    }
+
+    private void setPosition() {
         if (soundDef != null && soundDef.pos != null) {
             position.set(soundDef.pos).rotate(entity.orientation).add(entity.position);
         } else {
