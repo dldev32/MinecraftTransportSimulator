@@ -25,6 +25,7 @@ import minecrafttransportsimulator.entities.instances.APart;
 import minecrafttransportsimulator.entities.instances.EntityBullet;
 import minecrafttransportsimulator.entities.instances.EntityBullet.HitType;
 import minecrafttransportsimulator.entities.instances.EntityPlacedPart;
+import minecrafttransportsimulator.entities.instances.PartGun;
 import minecrafttransportsimulator.items.components.AItemBase;
 import minecrafttransportsimulator.items.components.AItemPart;
 import minecrafttransportsimulator.items.components.AItemSubTyped;
@@ -469,6 +470,13 @@ public abstract class AEntityF_Multipart<JSONDefinition extends AJSONPartProvide
 
     @Override
     public ComputedVariable createComputedVariable(String variable, boolean createDefaultIfNotPresent) {
+        switch (variable) {
+            case "gun_yaw_active":
+                return createActiveGunVariable(variable, "gun_yaw");
+            case "gun_pitch_active":
+                return createActiveGunVariable(variable, "gun_pitch");
+        }
+
         if (ComputedVariable.isNumberedVariable(variable)) {
             //Iterate through our parts to find the index of the pack def for the part we want.
             //First trim off the suffix number.
@@ -528,6 +536,52 @@ public abstract class AEntityF_Multipart<JSONDefinition extends AJSONPartProvide
         } else {
             return super.createComputedVariable(variable, createDefaultIfNotPresent);
         }
+    }
+
+    private ComputedVariable createActiveGunVariable(String variable, String gunVariable) {
+        final double[] lastValue = new double[1];
+        final boolean[] hasLastValue = new boolean[1];
+        return new ComputedVariable(this, variable, partialTicks -> {
+            PartGun activeGun = getActiveGun();
+            if (activeGun != null) {
+                lastValue[0] = activeGun.getActiveMountAngle(gunVariable, partialTicks);
+                hasLastValue[0] = true;
+            } else if (!hasLastValue[0]) {
+                PartGun firstGun = getFirstGun();
+                if (firstGun != null) {
+                    lastValue[0] = firstGun.getActiveMountAngle(gunVariable, partialTicks);
+                    hasLastValue[0] = true;
+                }
+            }
+            return lastValue[0];
+        }, true);
+    }
+
+    private PartGun getActiveGun() {
+        if (this instanceof PartGun && ((PartGun) this).isSelectedGun()) {
+            return (PartGun) this;
+        }
+        for (APart part : allParts) {
+            if (part instanceof PartGun) {
+                PartGun gun = (PartGun) part;
+                if (gun.isSelectedGun()) {
+                    return gun;
+                }
+            }
+        }
+        return null;
+    }
+
+    private PartGun getFirstGun() {
+        if (this instanceof PartGun) {
+            return (PartGun) this;
+        }
+        for (APart part : allParts) {
+            if (part instanceof PartGun) {
+                return (PartGun) part;
+            }
+        }
+        return null;
     }
 
     /**

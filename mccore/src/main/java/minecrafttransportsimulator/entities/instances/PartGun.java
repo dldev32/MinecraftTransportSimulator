@@ -18,6 +18,7 @@ import minecrafttransportsimulator.items.components.AItemBase;
 import minecrafttransportsimulator.items.instances.ItemBullet;
 import minecrafttransportsimulator.items.instances.ItemPartGun;
 import minecrafttransportsimulator.jsondefs.JSONAnimationDefinition;
+import minecrafttransportsimulator.jsondefs.JSONAnimationDefinition.AnimationComponentType;
 import minecrafttransportsimulator.jsondefs.JSONMuzzle;
 import minecrafttransportsimulator.jsondefs.JSONPart.InteractableComponentType;
 import minecrafttransportsimulator.jsondefs.JSONPart.LockOnType;
@@ -94,6 +95,13 @@ public class PartGun extends APart {
     private int currentMuzzleGroupIndex;
     private final RotationMatrix internalOrientation;
     private final RotationMatrix prevInternalOrientation;
+    private double activeMountYaw;
+    private double prevActiveMountYaw;
+    private double activeMountPitch;
+    private double prevActiveMountPitch;
+    private double appliedActiveMountYawDelta;
+    private double appliedActiveMountPitchDelta;
+    private boolean wasSelectedForActiveMount;
     private final List<ItemBullet> loadedBullets = new ArrayList<>();
     private final List<Integer> loadedBulletCounts = new ArrayList<>();
     private final List<ItemBullet> reloadingBullets = new ArrayList<>();
@@ -144,6 +152,7 @@ public class PartGun extends APart {
     private final Point3D targetAngles = new Point3D();
     private final Point3D controllerAngles = new Point3D();
     private final RotationMatrix firingSpreadRotation = new RotationMatrix();
+    private final RotationMatrix firingOrientation = new RotationMatrix();
     private final RotationMatrix pitchMuzzleRotation = new RotationMatrix();
     private final RotationMatrix yawMuzzleRotation = new RotationMatrix();
     private final RotationMatrix controllerCameraGunOrientation = new RotationMatrix();
@@ -279,6 +288,20 @@ public class PartGun extends APart {
                 }
             }
         }
+        if (data != null && data.hasKey("activeMountYaw")) {
+            this.activeMountYaw = data.getDouble("activeMountYaw");
+        } else if (hasActiveGunMountAnimation("gun_yaw_active")) {
+            this.activeMountYaw = internalOrientation.angles.y;
+            internalOrientation.angles.y = 0;
+        }
+        this.prevActiveMountYaw = activeMountYaw;
+        if (data != null && data.hasKey("activeMountPitch")) {
+            this.activeMountPitch = data.getDouble("activeMountPitch");
+        } else if (hasActiveGunMountAnimation("gun_pitch_active")) {
+            this.activeMountPitch = internalOrientation.angles.x;
+            internalOrientation.angles.x = 0;
+        }
+        this.prevActiveMountPitch = activeMountPitch;
         this.prevInternalOrientation = new RotationMatrix().set(internalOrientation);
 
         addVariable(this.muzzleVelocityVar = new ComputedVariable(this, "muzzleVelocity"));
@@ -317,6 +340,10 @@ public class PartGun extends APart {
         firedThisTick = false;
         isRunningInCoaxialMode = false;
         prevInternalOrientation.set(internalOrientation);
+        appliedActiveMountYawDelta = activeMountYaw - prevActiveMountYaw;
+        appliedActiveMountPitchDelta = activeMountPitch - prevActiveMountPitch;
+        prevActiveMountYaw = activeMountYaw;
+        prevActiveMountPitch = activeMountPitch;
         if (currentBullet != null && !currentBullet.isValid) {
             currentBullet = null;
         }
@@ -683,6 +710,28 @@ public class PartGun extends APart {
             lastControllerSeat.riderRelativeOrientation.angles.y -= (orientation.angles.y - prevOrientation.angles.y);
             lastControllerSeat.riderRelativeOrientation.angles.x -= (orientation.angles.x - prevOrientation.angles.x);
         }
+        if (lastControllerSeat != null && isActiveMountController()) {
+            AEntityF_Multipart<?> activeGunMount = getActiveGunMount();
+            if (activeGunMount.allParts.contains(lastControllerSeat) && !isSeatMountedOnGun(lastControllerSeat, activeGunMount)) {
+                if (hasActiveGunMountAnimation("gun_yaw_active")) {
+                    lastControllerSeat.riderRelativeOrientation.angles.y -= appliedActiveMountYawDelta;
+                }
+                if (hasActiveGunMountAnimation("gun_pitch_active")) {
+                    lastControllerSeat.riderRelativeOrientation.angles.x -= appliedActiveMountPitchDelta;
+                }
+            }
+        }
+    }
+
+    private static boolean isSeatMountedOnGun(PartSeat seat, AEntityF_Multipart<?> activeGunMount) {
+        AEntityF_Multipart<?> parent = seat.entityOn;
+        while (parent != activeGunMount && parent instanceof APart) {
+            if (parent instanceof PartGun) {
+                return true;
+            }
+            parent = ((APart) parent).entityOn;
+        }
+        return false;
     }
 
     @Override
@@ -789,7 +838,9 @@ public class PartGun extends APart {
                     controller.setPitch(controllerAngles.x);
 
                     //Only fire if we're within 1 movement increment of the target.
-                    if (Math.abs(targetAngles.y - internalOrientation.angles.y) < yawSpeed && Math.abs(targetAngles.x - internalOrientation.angles.x) < pitchSpeed) {
+                    double yawTolerance = yawSpeed + (isMountedOnActiveGunVariable("gun_yaw_active") ? getActiveMountSpeed("gun_yaw_active", yawSpeed) : 0);
+                    double pitchTolerance = pitchSpeed + (isMountedOnActiveGunVariable("gun_pitch_active") ? getActiveMountSpeed("gun_pitch_active", pitchSpeed) : 0);
+                    if (Math.abs(getNormalizedAngleDelta(targetAngles.y, getFiringYaw())) <= Math.max(yawTolerance, 0.01) && Math.abs(targetAngles.x - getFiringPitch()) <= Math.max(pitchTolerance, 0.01)) {
                         state = state.promote(GunState.FIRING_REQUESTED);
                     } else {
                         state = state.demote(GunState.CONTROLLED);
@@ -936,25 +987,55 @@ public class PartGun extends APart {
         //Get the delta between our orientation and the player's orientation.
         if (lastControllerSeat != null) {
             controllerRelativeLookVector.computeVectorAngles(controller.getOrientation(), zeroReferenceOrientation);
-            handleMovement(controllerRelativeLookVector.y - internalOrientation.angles.y, controllerRelativeLookVector.x - internalOrientation.angles.x);
+            updateActiveMountAngles();
+            double desiredLocalYaw = isMountedOnActiveGunVariable("gun_yaw_active") ? controllerRelativeLookVector.y - getSharedActiveMountYaw() : controllerRelativeLookVector.y;
+            double desiredLocalPitch = isMountedOnActiveGunVariable("gun_pitch_active") ? controllerRelativeLookVector.x - getSharedActiveMountPitch() : controllerRelativeLookVector.x;
+            if (desiredLocalYaw < -180) {
+                desiredLocalYaw += 360;
+            } else if (desiredLocalYaw > 180) {
+                desiredLocalYaw -= 360;
+            }
+            if (isMountedOnActiveGunVariable("gun_yaw_active")) {
+                desiredLocalYaw = Math.max(minYaw, Math.min(maxYaw, desiredLocalYaw));
+            }
+            if (isMountedOnActiveGunVariable("gun_pitch_active")) {
+                desiredLocalPitch = Math.max(minPitch, Math.min(maxPitch, desiredLocalPitch));
+            }
+            handleMovement(desiredLocalYaw - internalOrientation.angles.y, desiredLocalPitch - internalOrientation.angles.x);
             //If the seat is a part on us, or the seat has animations linked to us, adjust player rotations.
             //This is required to ensure this gun doesn't rotate forever.
             if (!lastControllerSeat.externalAnglesRotated.isZero() && lastControllerSeat.placementDefinition.animations != null) {
                 boolean updateYaw = false;
                 boolean updatePitch = false;
-                for (JSONAnimationDefinition def : lastControllerSeat.placementDefinition.animations) {
-                    if (def.variable.contains("gun_yaw")) {
-                        updateYaw = true;
-                    } else if (def.variable.contains("gun_pitch")) {
-                        updatePitch = true;
+                boolean updateActiveYaw = false;
+                boolean updateActivePitch = false;
+                if (lastControllerSeat.placementDefinition.animations != null) {
+                    for (JSONAnimationDefinition def : lastControllerSeat.placementDefinition.animations) {
+                        if (def.animationType != AnimationComponentType.ROTATION) {
+                            continue;
+                        }
+                        if (def.variable.equals("gun_yaw_active")) {
+                            updateActiveYaw = true;
+                        } else if (def.variable.contains("gun_yaw")) {
+                            updateYaw = true;
+                        }
+                        if (def.variable.equals("gun_pitch_active")) {
+                            updateActivePitch = true;
+                        } else if (def.variable.contains("gun_pitch")) {
+                            updatePitch = true;
+                        }
                     }
                 }
-                if (updateYaw) {
-                    lastControllerSeat.riderRelativeOrientation.angles.y -= (internalOrientation.angles.y - prevInternalOrientation.angles.y);
+                if (updateYaw || updateActiveYaw) {
+                    double yawDelta = updateYaw ? internalOrientation.angles.y - prevInternalOrientation.angles.y : 0;
+                    yawDelta += updateActiveYaw && isActiveMountController() ? activeMountYaw - prevActiveMountYaw : 0;
+                    lastControllerSeat.riderRelativeOrientation.angles.y -= yawDelta;
 
                 }
-                if (updatePitch) {
-                    lastControllerSeat.riderRelativeOrientation.angles.x -= (internalOrientation.angles.x - prevInternalOrientation.angles.x);
+                if (updatePitch || updateActivePitch) {
+                    double pitchDelta = updatePitch ? internalOrientation.angles.x - prevInternalOrientation.angles.x : 0;
+                    pitchDelta += updateActivePitch && isActiveMountController() ? activeMountPitch - prevActiveMountPitch : 0;
+                    lastControllerSeat.riderRelativeOrientation.angles.x -= pitchDelta;
                 }
             }
             if (world.isClient() && lastControllerSeat.riderIsClient && lastControllerSeat.activeCamera != null && (lastControllerSeat.activeCameraEntity == this || allParts.contains(lastControllerSeat.activeCameraEntity))) {
@@ -964,7 +1045,8 @@ public class PartGun extends APart {
     }
 
     private void lockControllerToActiveCamera(IWrapperEntity controller) {
-        controllerCameraGunOrientation.setToAngles(internalOrientation.angles);
+        controllerCameraGunOrientation.angles.set(getFiringPitch(), getFiringYaw(), 0);
+        controllerCameraGunOrientation.updateToAngles();
         controllerCameraOrientation.set(zeroReferenceOrientation).multiply(controllerCameraGunOrientation).convertToAngles();
         controllerCameraRelativeAngles.computeVectorAngles(controllerCameraOrientation, lastControllerSeat.orientation);
         lastControllerSeat.riderRelativeOrientation.angles.set(controllerCameraRelativeAngles);
@@ -992,7 +1074,8 @@ public class PartGun extends APart {
             } else {
                 bulletPosition.set(0, 0, 0);
             }
-            bulletPosition.rotate(internalOrientation).add(position);
+            updateFiringOrientation();
+            bulletPosition.rotate(firingOrientation).add(position);
 
             targetVector.set(target.getPosition());
             targetVector.y += target.getEyeHeight() / 2D;
@@ -1004,14 +1087,14 @@ public class PartGun extends APart {
             targetAngles.set(targetVector).reOrigin(zeroReferenceOrientation).getAngles(true);
 
             //Check yaw, if we need to.
-            if (minYaw != -180 || maxYaw != 180) {
+            if (!isMountedOnActiveGunVariable("gun_yaw_active") && (minYaw != -180 || maxYaw != 180)) {
                 if (targetAngles.y < minYaw || targetAngles.y > maxYaw) {
                     return false;
                 }
             }
 
             //Check pitch.
-            if (targetAngles.x < minPitch || targetAngles.x > maxPitch) {
+            if (!isMountedOnActiveGunVariable("gun_pitch_active") && (targetAngles.x < minPitch || targetAngles.x > maxPitch)) {
                 return false;
             }
 
@@ -1090,6 +1173,238 @@ public class PartGun extends APart {
                 }
             }
         }
+    }
+
+    private boolean isMountedOnActiveGunVariable(String variable) {
+        return (isSelectedGun() || isRunningInCoaxialMode) && getActiveMountControllerGun() != null && hasActiveGunMountAnimation(variable);
+    }
+
+    private double getFiringYaw() {
+        return isMountedOnActiveGunVariable("gun_yaw_active") ? getSharedActiveMountYaw() + internalOrientation.angles.y : internalOrientation.angles.y;
+    }
+
+    private double getFiringPitch() {
+        return isMountedOnActiveGunVariable("gun_pitch_active") ? getSharedActiveMountPitch() + internalOrientation.angles.x : internalOrientation.angles.x;
+    }
+
+    private void updateFiringOrientation() {
+        firingOrientation.angles.set(getFiringPitch(), getFiringYaw(), 0);
+        firingOrientation.updateToAngles();
+    }
+
+    private static double getNormalizedAngleDelta(double targetAngle, double currentAngle) {
+        double delta = targetAngle - currentAngle;
+        while (delta < -180) {
+            delta += 360;
+        }
+        while (delta > 180) {
+            delta -= 360;
+        }
+        return delta;
+    }
+
+    private void updateActiveMountAngles() {
+        if (!isActiveMountController()) {
+            return;
+        }
+        boolean selectedForActiveMount = isSelectedGun() && (hasActiveGunMountAnimation("gun_yaw_active") || hasActiveGunMountAnimation("gun_pitch_active"));
+        if (selectedForActiveMount && !wasSelectedForActiveMount) {
+            PartGun previousActiveGun = getPreviousActiveMountGun();
+            PartGun angleSource = previousActiveGun != null ? previousActiveGun : getFirstActiveMountGun();
+            if (angleSource != null && angleSource != this) {
+                angleSource.copyActiveMountAnglesTo(this);
+            }
+            wasSelectedForActiveMount = true;
+        }
+        if (isMountedOnActiveGunVariable("gun_yaw_active")) {
+            double yawDelta = controllerRelativeLookVector.y - activeMountYaw;
+            if (yawDelta < -180) {
+                yawDelta += 360;
+            } else if (yawDelta > 180) {
+                yawDelta -= 360;
+            }
+            double mountYawSpeed = getActiveMountSpeed("gun_yaw_active", yawSpeed);
+            if (yawDelta < -mountYawSpeed) {
+                yawDelta = -mountYawSpeed;
+            } else if (yawDelta > mountYawSpeed) {
+                yawDelta = mountYawSpeed;
+            }
+            activeMountYaw += yawDelta;
+            if (activeMountYaw > 180) {
+                activeMountYaw -= 360;
+                prevActiveMountYaw -= 360;
+            } else if (activeMountYaw < -180) {
+                activeMountYaw += 360;
+                prevActiveMountYaw += 360;
+            }
+        }
+        if (isMountedOnActiveGunVariable("gun_pitch_active")) {
+            double pitchDelta = controllerRelativeLookVector.x - activeMountPitch;
+            double mountPitchSpeed = getActiveMountSpeed("gun_pitch_active", pitchSpeed);
+            if (pitchDelta < -mountPitchSpeed) {
+                pitchDelta = -mountPitchSpeed;
+            } else if (pitchDelta > mountPitchSpeed) {
+                pitchDelta = mountPitchSpeed;
+            }
+            activeMountPitch += pitchDelta;
+        }
+        synchronizeActiveMountAngles();
+    }
+
+    private double getActiveMountSpeed(String variable, double defaultSpeed) {
+        AEntityF_Multipart<?> mount = getActiveGunMount();
+        if (mount instanceof PartGun && ((PartGun) mount).hasActiveGunMountAnimation(variable)) {
+            PartGun gun = (PartGun) mount;
+            return variable.equals("gun_yaw_active") ? gun.yawSpeed : gun.pitchSpeed;
+        }
+        for (APart part : mount.allParts) {
+            if (part instanceof PartGun) {
+                PartGun gun = (PartGun) part;
+                if (gun.hasActiveGunMountAnimation(variable)) {
+                    return variable.equals("gun_yaw_active") ? gun.yawSpeed : gun.pitchSpeed;
+                }
+            }
+        }
+        return defaultSpeed;
+    }
+
+    private boolean isActiveMountController() {
+        return getActiveMountControllerGun() == this;
+    }
+
+    private double getSharedActiveMountYaw() {
+        PartGun activeMountController = getActiveMountControllerGun();
+        return activeMountController != null ? activeMountController.activeMountYaw : activeMountYaw;
+    }
+
+    private double getSharedActiveMountPitch() {
+        PartGun activeMountController = getActiveMountControllerGun();
+        return activeMountController != null ? activeMountController.activeMountPitch : activeMountPitch;
+    }
+
+    private PartGun getActiveMountControllerGun() {
+        AEntityF_Multipart<?> mount = getActiveGunMount();
+        if (mount instanceof PartGun && ((PartGun) mount).isSelectedGun()) {
+            return (PartGun) mount;
+        }
+        for (APart part : mount.allParts) {
+            if (part instanceof PartGun && ((PartGun) part).isSelectedGun()) {
+                return (PartGun) part;
+            }
+        }
+        if (lastControllerSeat != null && lastControllerSeat.rider != null) {
+            if (mount instanceof PartGun && ((PartGun) mount).isSelectedBySeat(lastControllerSeat)) {
+                return (PartGun) mount;
+            }
+            for (APart part : mount.allParts) {
+                if (part instanceof PartGun && ((PartGun) part).isSelectedBySeat(lastControllerSeat)) {
+                    return (PartGun) part;
+                }
+            }
+        }
+        return null;
+    }
+
+    private void synchronizeActiveMountAngles() {
+        AEntityF_Multipart<?> mount = getActiveGunMount();
+        if (mount instanceof PartGun && mount != this) {
+            copyActiveMountAnglesTo((PartGun) mount);
+        }
+        for (APart part : mount.allParts) {
+            if (part instanceof PartGun && part != this) {
+                copyActiveMountAnglesTo((PartGun) part);
+            }
+        }
+    }
+
+    private void copyActiveMountAnglesTo(PartGun gun) {
+        gun.activeMountYaw = activeMountYaw;
+        gun.prevActiveMountYaw = prevActiveMountYaw;
+        gun.activeMountPitch = activeMountPitch;
+        gun.prevActiveMountPitch = prevActiveMountPitch;
+    }
+
+    private PartGun getFirstActiveMountGun() {
+        AEntityF_Multipart<?> mount = getActiveGunMount();
+        if (mount instanceof PartGun) {
+            PartGun gun = (PartGun) mount;
+            if (gun.hasActiveGunMountAnimation("gun_yaw_active") || gun.hasActiveGunMountAnimation("gun_pitch_active")) {
+                return gun;
+            }
+        }
+        for (APart part : mount.allParts) {
+            if (part instanceof PartGun) {
+                PartGun gun = (PartGun) part;
+                if (gun.hasActiveGunMountAnimation("gun_yaw_active") || gun.hasActiveGunMountAnimation("gun_pitch_active")) {
+                    return gun;
+                }
+            }
+        }
+        return null;
+    }
+
+    private PartGun getPreviousActiveMountGun() {
+        AEntityF_Multipart<?> mount = getActiveGunMount();
+        if (mount instanceof PartGun) {
+            PartGun gun = (PartGun) mount;
+            if (gun != this && gun.wasSelectedForActiveMount) {
+                gun.wasSelectedForActiveMount = false;
+                return gun;
+            }
+        }
+        for (APart part : mount.allParts) {
+            if (part instanceof PartGun) {
+                PartGun gun = (PartGun) part;
+                if (gun != this && gun.wasSelectedForActiveMount) {
+                    gun.wasSelectedForActiveMount = false;
+                    return gun;
+                }
+            }
+        }
+        return null;
+    }
+
+    private AEntityF_Multipart<?> getActiveGunMount() {
+        AEntityF_Multipart<?> mountingEntity = entityOn;
+        AEntityF_Multipart<?> activeGunMount = entityOn;
+        while (mountingEntity instanceof APart) {
+            APart mountingPart = (APart) mountingEntity;
+            if (hasActiveGunMountAnimation(mountingPart, "gun_yaw_active") || hasActiveGunMountAnimation(mountingPart, "gun_pitch_active")) {
+                activeGunMount = mountingPart;
+            }
+            mountingEntity = mountingPart.entityOn;
+        }
+        return activeGunMount;
+    }
+
+    private boolean hasActiveGunMountAnimation(String variable) {
+        AEntityF_Multipart<?> mountingEntity = entityOn;
+        while (mountingEntity instanceof APart) {
+            APart mountingPart = (APart) mountingEntity;
+            if (hasActiveGunMountAnimation(mountingPart, variable)) {
+                return true;
+            }
+            mountingEntity = mountingPart.entityOn;
+        }
+        return false;
+    }
+
+    private static boolean hasActiveGunMountAnimation(APart mountingPart, String variable) {
+        if (mountingPart.definition.generic.movementAnimations != null) {
+            for (JSONAnimationDefinition animation : mountingPart.definition.generic.movementAnimations) {
+                if (animation.animationType == AnimationComponentType.ROTATION && animation.variable.equals(variable)) {
+                    return true;
+                }
+            }
+        }
+        if (mountingPart.placementDefinition.animations != null) {
+            for (JSONAnimationDefinition animation : mountingPart.placementDefinition.animations) {
+                if (animation.animationType == AnimationComponentType.ROTATION && animation.variable.equals(variable)) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     /**
@@ -1220,6 +1535,31 @@ public class PartGun extends APart {
         return null;
     }
 
+    public double getActiveMountAngle(String gunVariable, float partialTicks) {
+        boolean yaw = gunVariable.equals("gun_yaw");
+        if (hasActiveGunMountAnimation(yaw ? "gun_yaw_active" : "gun_pitch_active")) {
+            PartGun activeMountController = getActiveMountControllerGun();
+            PartGun angleSource = activeMountController != null ? activeMountController : this;
+            double previousAngle = yaw ? angleSource.prevActiveMountYaw : angleSource.prevActiveMountPitch;
+            double currentAngle = yaw ? angleSource.activeMountYaw : angleSource.activeMountPitch;
+            return partialTicks != 0 ? previousAngle + (currentAngle - previousAngle) * partialTicks : currentAngle;
+        } else {
+            return getOrCreateVariable(gunVariable).computeValue(partialTicks);
+        }
+    }
+
+    public boolean isSelectedGun() {
+        return state.isAtLeast(GunState.CONTROLLED) && isSelectedBySeat(lastControllerSeat);
+    }
+
+    private boolean isSelectedBySeat(PartSeat seat) {
+        if (seat != null && cachedItem == seat.activeGunItem) {
+            List<PartGun> gunGroup = seat.gunGroups.get(cachedItem);
+            return !definition.gun.fireSolo || (gunGroup != null && seat.gunIndex >= 0 && seat.gunIndex < gunGroup.size() && gunGroup.get(seat.gunIndex) == this);
+        }
+        return false;
+    }
+
     /**
      * Common method to do knocback for guns.  Is either called directly on the server when the gun is fired, or via packet sent by the master-client.
      */
@@ -1247,6 +1587,10 @@ public class PartGun extends APart {
      * Used in both spawning the bullet, and in rendering where the muzzle position is.
      */
     public void setBulletSpawn(Point3D bulletPosition, Point3D bulletVelocity, RotationMatrix bulletOrientation, JSONMuzzle muzzle, boolean addSpread) {
+        double firingYaw = getFiringYaw();
+        double firingPitch = getFiringPitch();
+        updateFiringOrientation();
+
         //Set velocity.
         if (muzzleVelocityVar.currentValue != 0) {
             bulletVelocity.set(0, 0, muzzleVelocityVar.currentValue / 20D);
@@ -1270,7 +1614,7 @@ public class PartGun extends APart {
             if (muzzle.rot != null) {
                 bulletVelocity.rotate(muzzle.rot);
             }
-            bulletVelocity.rotate(internalOrientation).rotate(zeroReferenceOrientation);
+            bulletVelocity.rotate(firingOrientation).rotate(zeroReferenceOrientation);
         } else {
             bulletVelocity.set(0, 0, 0);
         }
@@ -1287,16 +1631,16 @@ public class PartGun extends APart {
         //Set position.
         bulletPosition.set(muzzle.pos);
         if (muzzle.center != null) {
-            pitchMuzzleRotation.setToZero().rotateX(internalOrientation.angles.x);
-            yawMuzzleRotation.setToZero().rotateY(internalOrientation.angles.y);
+            pitchMuzzleRotation.setToZero().rotateX(firingPitch);
+            yawMuzzleRotation.setToZero().rotateY(firingYaw);
             bulletPosition.subtract(muzzle.center).rotate(pitchMuzzleRotation).add(muzzle.center).rotate(yawMuzzleRotation);
         } else {
-            bulletPosition.rotate(internalOrientation);
+            bulletPosition.rotate(firingOrientation);
         }
         bulletPosition.rotate(zeroReferenceOrientation).add(position);
 
         //Set orientation.
-        bulletOrientation.set(zeroReferenceOrientation).multiply(internalOrientation);
+        bulletOrientation.set(zeroReferenceOrientation).multiply(firingOrientation);
         if (muzzle.rot != null && !definition.gun.disableMuzzleOrientation) {
             bulletOrientation.multiply(muzzle.rot);
         }
@@ -1526,6 +1870,8 @@ public class PartGun extends APart {
         data.setInteger("bulletsFired", bulletsFired);
         data.setInteger("currentMuzzleGroupIndex", currentMuzzleGroupIndex);
         data.setPoint3d("internalAngles", internalOrientation.angles);
+        data.setDouble("activeMountYaw", activeMountYaw);
+        data.setDouble("activeMountPitch", activeMountPitch);
         for (int i = 0; i < loadedBullets.size(); ++i) {
             IWrapperNBT bulletData = InterfaceManager.coreInterface.getNewNBTWrapper();
             bulletData.setPackItem(loadedBullets.get(i).definition, "");
