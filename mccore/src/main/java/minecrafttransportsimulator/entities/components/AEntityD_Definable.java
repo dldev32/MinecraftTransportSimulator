@@ -110,6 +110,8 @@ public abstract class AEntityD_Definable<JSONDefinition extends AJSONMultiModelP
     private long lastTickParticlesSpawned;
     private float lastPartialTickParticlesSpawned;
     private static final Point3D particleSpawningPosition = new Point3D();
+    private static final Point3D particleTrailPosition = new Point3D();
+    private static final Point3D particleTrailDelta = new Point3D();
 
     /**
      * Maps animated (model) object names to their JSON bits for this entity.  Used for model lookups as the same model might be used on multiple JSONs,
@@ -176,6 +178,7 @@ public abstract class AEntityD_Definable<JSONDefinition extends AJSONMultiModelP
 
     public static final String REPAIRED_NAME = "repaired";
     private static final int DEFAULT_GUI_TEXT_FADE_TICKS = 7;
+    private static final int DEFAULT_GUI_TEXTURE_DELAY_TICKS = 20;
 
     /**
      * Constructor for synced entities
@@ -592,7 +595,30 @@ public abstract class AEntityD_Definable<JSONDefinition extends AJSONMultiModelP
             //Make the particle spawn if able.
             if (shouldParticleSpawn) {
                 AnimationSwitchbox spawningSwitchbox = particleSpawningSwitchboxes.get(particleDef);
-                if (particleDef.distance > 0) {
+                if (particleDef.spawningOrientation == JSONParticle.ParticleSpawningOrientation.TRAIL) {
+                    //First get spawning position as defined by JSON and animations.
+                    EntityParticle.setPointToSpawn(position, orientation, particleDef.pos, scale, spawningSwitchbox, particleSpawningPosition);
+
+                    //Spawn one particle for the whole segment, aligned on the local Z-axis.
+                    Point3D lastParticlePosition = lastPositionParticleSpawned.get(particleDef);
+                    if (lastParticlePosition == null) {
+                        lastPositionParticleSpawned.put(particleDef, particleSpawningPosition.copy());
+                        continue;//First tick we are active, checks are assured to fail.
+                    }
+                    if (particleDef.distance == 0 || !lastParticlePosition.isDistanceToCloserThan(particleSpawningPosition, particleDef.distance)) {
+                        particleTrailDelta.set(particleSpawningPosition).subtract(lastParticlePosition);
+                        double trailLength = particleTrailDelta.length();
+                        if (trailLength > 0) {
+                            particleTrailPosition.set(lastParticlePosition).interpolate(particleSpawningPosition, 0.5);
+                            for (int i = 0; i < particleDef.quantity; ++i) {
+                                EntityParticle particle = new EntityParticle(this, particleDef, particleTrailPosition, particleTrailDelta.copy().getAngles(true), spawningSwitchbox);
+                                particle.setTrailSegmentLength(trailLength);
+                                world.addEntity(particle);
+                            }
+                        }
+                        lastParticlePosition.set(particleSpawningPosition);
+                    }
+                } else if (particleDef.distance > 0) {
                     //First get spawning position as defined by JSON and animations.
                     EntityParticle.setPointToSpawn(position, particleDef.spawningOrientation == JSONParticle.ParticleSpawningOrientation.WORLD ? null : orientation, particleDef.pos, scale, spawningSwitchbox, particleSpawningPosition);
 
@@ -1011,6 +1037,8 @@ public abstract class AEntityD_Definable<JSONDefinition extends AJSONMultiModelP
                 return new ComputedVariable(this, variable, partialTicks -> ConfigSystem.client.controlSettings.arcadeMode.value ? 1 : 0, false);
 			case ("config_tutorial"):
                 return new ComputedVariable(this, variable, partialTicks -> ConfigSystem.client.controlSettings.showTutorial.value ? 1 : 0, false);
+            case ("config_helper"):
+                return new ComputedVariable(this, variable, partialTicks -> ConfigSystem.client.controlSettings.showHoverTxt.value ? 1 : 0, false);
             case ("config_innerwindows"):
                 return new ComputedVariable(this, variable, partialTicks -> ConfigSystem.client.renderingSettings.innerWindows.value ? 1 : 0, false);
             default: {
@@ -1111,6 +1139,43 @@ public abstract class AEntityD_Definable<JSONDefinition extends AJSONMultiModelP
      */
     public String getGUITextValue(JSONText textDef, float partialTicks) {
         return formatTextValue(textDef, getCurrentTextValue(textDef), partialTicks);
+    }
+
+    /**
+     * Returns the texture currently selected for the passed-in GUI text definition.
+     * Texture timing is based on entity ticks so all render frames within a tick use the same image.
+     */
+    public String getGUITextureName(JSONText textDef) {
+        if (textDef.textureNames == null || textDef.textureNames.isEmpty()) {
+            return null;
+        } else if (textDef.textureNames.size() == 1) {
+            return textDef.textureNames.get(0);
+        }
+
+        long totalCycleTime = 0;
+        for (int textureIndex = 0; textureIndex < textDef.textureNames.size(); ++textureIndex) {
+            totalCycleTime += getGUITextureDelay(textDef, textureIndex);
+        }
+
+        long timeInCycle = ticksExisted % totalCycleTime;
+        for (int textureIndex = 0; textureIndex < textDef.textureNames.size(); ++textureIndex) {
+            int textureDelay = getGUITextureDelay(textDef, textureIndex);
+            if (timeInCycle < textureDelay) {
+                return textDef.textureNames.get(textureIndex);
+            }
+            timeInCycle -= textureDelay;
+        }
+        return textDef.textureNames.get(0);
+    }
+
+    private static int getGUITextureDelay(JSONText textDef, int textureIndex) {
+        if (textDef.textureDelays != null && !textDef.textureDelays.isEmpty()) {
+            int customDelay = textDef.textureDelays.get(textureIndex % textDef.textureDelays.size());
+            if (customDelay > 0) {
+                return customDelay;
+            }
+        }
+        return DEFAULT_GUI_TEXTURE_DELAY_TICKS;
     }
 
     /**
