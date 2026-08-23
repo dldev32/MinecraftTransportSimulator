@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Random;
 import java.util.Set;
 
+import minecrafttransportsimulator.ai.AIGunController;
 import minecrafttransportsimulator.baseclasses.BlockHitResult;
 import minecrafttransportsimulator.baseclasses.BoundingBox;
 import minecrafttransportsimulator.baseclasses.ColorRGB;
@@ -125,6 +126,7 @@ public class PartGun extends APart {
     private IWrapperEntity currentController;
     public IWrapperEntity lastController;
     private PartSeat lastControllerSeat;
+    private AIGunController aiGunController;
     private Point3D controllerRelativeLookVector = new Point3D();
     public IWrapperEntity entityTarget;
     public PartEngine engineTarget;
@@ -141,8 +143,6 @@ public class PartGun extends APart {
 
     //Temp helper variables for calculations
     private final Point3D targetVector = new Point3D();
-    private final Point3D targetAngles = new Point3D();
-    private final Point3D controllerAngles = new Point3D();
     private final RotationMatrix firingSpreadRotation = new RotationMatrix();
     private final RotationMatrix pitchMuzzleRotation = new RotationMatrix();
     private final RotationMatrix yawMuzzleRotation = new RotationMatrix();
@@ -754,54 +754,9 @@ public class PartGun extends APart {
      * gun clamping into account as that's done in {@link #handleMovement(double, double)}
      */
     private void handleControl(IWrapperEntity controller) {
-        //If the controller isn't a player, but is a NPC, make them look at the nearest hostile mob.
-        //We also get a flag to see if the gun is currently pointed to the hostile mob.
-        //If not, then we don't fire the gun, as that'd waste ammo.
-        //Need to aim for the middle of the mob, not their base (feet).
-        //Also make the gunner account for bullet delay and movement of the hostile.
-        //This makes them track better when the target is moving.
-        //We only do this
+        //If the controller isn't a player, but is a NPC, delegate to the AI gun controller.
         if (!(controller instanceof IWrapperPlayer)) {
-            //Get new target if we don't have one, or if we've gone 1 second and we have a closer target by 5 blocks.
-            boolean checkForCloser = entityTarget != null && ticksExisted % 20 == 0;
-            if (entityTarget == null || checkForCloser) {
-                for (IWrapperEntity entity : world.getEntitiesHostile(controller, 128)) {
-                    if (validateTarget(controller, entity)) {
-                        if (entityTarget != null) {
-                            double distanceToBeat = position.distanceTo(entityTarget.getPosition());
-                            if (checkForCloser) {
-                                distanceToBeat += 5;
-                            }
-                            if (position.distanceTo(entity.getPosition()) > distanceToBeat) {
-                                continue;
-                            }
-                        }
-                        entityTarget = entity;
-                    }
-                }
-            }
-
-            //If we have a target, validate it and try to hit it.
-            if (entityTarget != null) {
-                if (validateTarget(controller, entityTarget)) {
-                    controllerAngles.set(targetVector).getAngles(true);
-                    controller.setYaw(controllerAngles.y);
-                    controller.setPitch(controllerAngles.x);
-
-                    //Only fire if we're within 1 movement increment of the target.
-                    if (Math.abs(targetAngles.y - internalOrientation.angles.y) < yawSpeed && Math.abs(targetAngles.x - internalOrientation.angles.x) < pitchSpeed) {
-                        state = state.promote(GunState.FIRING_REQUESTED);
-                    } else {
-                        state = state.demote(GunState.CONTROLLED);
-                    }
-                } else {
-                    entityTarget = null;
-                    updateTargetRegistration();
-                    state = state.demote(GunState.CONTROLLED);
-                }
-            } else {
-                state = state.demote(GunState.CONTROLLED);
-            }
+            getAIGunController().updateControl(controller, lastControllerSeat);
         } else {
             //Player-controlled gun.
             //Check for a target for this gun if we have a lock-on missile.
@@ -975,50 +930,29 @@ public class PartGun extends APart {
         controller.getPitchDelta();
     }
 
-    /**
-     * Helper method to validate a target as possible for this gun.
-     * Checks entity position relative to the gun, and if the entity
-     * is behind any blocks.  Returns true if the target is valid.
-     * Also sets {@link #targetVector} and {@link #targetAngles}
-     */
-    private boolean validateTarget(IWrapperEntity controller, IWrapperEntity target) {
-        if (target.isValid()) {
-            //Get vector from gun center to target.
-            //Target we aim for the middle, as it's more accurate.
-            //We also take into account tracking for bullet speed.
-            JSONMuzzle muzzleDef = definition.gun.muzzleGroups.get(currentMuzzleGroupIndex).muzzles.get(0);
-            if (muzzleDef.center != null) {
-                bulletPosition.set(muzzleDef.center);
-            } else {
-                bulletPosition.set(0, 0, 0);
-            }
-            bulletPosition.rotate(internalOrientation).add(position);
-
-            targetVector.set(target.getPosition());
-            targetVector.y += target.getBounds().heightRadius;
-            targetVector.subtract(bulletPosition);
-
-            //Transform vector to gun's coordinate system.
-            //Get the angles the gun has to rotate to match the target.
-            //If the are outside the gun's clamps, this isn't a valid target.
-            targetAngles.set(targetVector).reOrigin(zeroReferenceOrientation).getAngles(true);
-
-            //Check yaw, if we need to.
-            if (minYaw != -180 || maxYaw != 180) {
-                if (targetAngles.y < minYaw || targetAngles.y > maxYaw) {
-                    return false;
-                }
-            }
-
-            //Check pitch.
-            if (targetAngles.x < minPitch || targetAngles.x > maxPitch) {
-                return false;
-            }
-
-            //Check block raytracing.
-            return world.getBlockHit(bulletPosition, targetVector) == null;
+    private AIGunController getAIGunController() {
+        if (aiGunController == null) {
+            aiGunController = new AIGunController(this, internalOrientation, minYaw, maxYaw, yawSpeed, minPitch, maxPitch, pitchSpeed, () -> {
+                entityTarget = null;
+                engineTarget = null;
+                updateTargetRegistration();
+            });
         }
-        return false;
+        return aiGunController;
+    }
+
+    /**
+     * Returns true if this gun can aim at the supplied AI target within its movement bounds and line of sight.
+     */
+    public boolean canAITarget(IWrapperEntity target) {
+        return target != null && getAIGunController().canAimAtTarget(target);
+    }
+
+    /**
+     * Returns true if this gun can aim at the supplied AI vehicle target.
+     */
+    public boolean canAITarget(PartEngine target) {
+        return target != null && getAIGunController().canAimAtTarget(target);
     }
 
     /**
@@ -1179,6 +1113,22 @@ public class PartGun extends APart {
         } else {
             return "EMPTY";
         }
+    }
+
+    /**
+     * Returns the total number of bullets currently loaded in this gun.
+     */
+    public int getLoadedBulletCount() {
+        return loadedBulletCount;
+    }
+
+    /**
+     * Transfers the current target when AI weapon selection changes guns.
+     */
+    public void setAITarget(IWrapperEntity entityTarget, PartEngine engineTarget) {
+        this.entityTarget = entityTarget;
+        this.engineTarget = engineTarget;
+        updateTargetRegistration();
     }
 
     /**

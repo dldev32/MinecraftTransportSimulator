@@ -4,7 +4,9 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.UUID;
 
+import minecrafttransportsimulator.ai.AIGunController;
 import minecrafttransportsimulator.baseclasses.ComputedVariable;
 import minecrafttransportsimulator.baseclasses.Point3D;
 import minecrafttransportsimulator.baseclasses.RotationMatrix;
@@ -36,6 +38,9 @@ import minecrafttransportsimulator.systems.LanguageSystem;
 import minecrafttransportsimulator.systems.LanguageSystem.LanguageEntry;
 
 public final class PartSeat extends APart {
+    private static final int PENDING_GUN_SELECTION_TIMEOUT_TICKS = 20;
+    private static final int PENDING_AI_TARGET_TIMEOUT_TICKS = 100;
+
     public boolean canControlGuns;
     private boolean riderChangingSeats;
     public final Point3D riderScale = new Point3D();
@@ -44,6 +49,15 @@ public final class PartSeat extends APart {
     public int gunGroupIndex;
     public int gunIndex;
     public final HashMap<ItemPartGun, List<PartGun>> gunGroups = new LinkedHashMap<>();
+    private long lastAIWeaponSelectionTick = Long.MIN_VALUE;
+    private long lastAIWeaponTargetSearchTick = Long.MIN_VALUE;
+    private ItemPartGun pendingActiveGunItem;
+    private int pendingGunIndex;
+    private UUID pendingEntityTargetID;
+    private UUID pendingEngineTargetID;
+    private boolean pendingAITargetUpdate;
+    private long pendingActiveGunExpirationTick = Long.MIN_VALUE;
+    private long pendingAITargetExpirationTick = Long.MIN_VALUE;
 
     public PartSeat(AEntityF_Multipart<?> entityOn, IWrapperPlayer placingPlayer, JSONPartDefinition placementDefinition, ItemPartSeat item, IWrapperNBT data) {
         super(entityOn, placingPlayer, placementDefinition, item, data);
@@ -52,6 +66,10 @@ public final class PartSeat extends APart {
         }
         if (data != null) {
             this.activeGunItem = PackParser.getItem(data.getString("activeGunPackID"), data.getString("activeGunSystemName"), data.getString("activeGunSubName"));
+            this.gunIndex = data.getInteger("activeGunIndex");
+            this.pendingActiveGunItem = activeGunItem;
+            this.pendingGunIndex = gunIndex;
+            this.pendingActiveGunExpirationTick = masterEntity.ticksExisted + PENDING_GUN_SELECTION_TIMEOUT_TICKS;
         }
     }
 
@@ -105,9 +123,15 @@ public final class PartSeat extends APart {
     @Override
     public void update() {
         super.update();
+        applyPendingActiveGun();
+        applyPendingAITarget();
+        if (activeGunItem == null && pendingActiveGunItem == null && rider != null && !placementDefinition.canDisableGun) {
+            setNextActiveGun();
+        }
         if (!canControlGuns && (activeGunItem != null || placementDefinition.canDisableGun)) {
             canControlGuns = true;
         }
+        AIGunController.ensureWeaponAvailable(this);
     }
 
     @Override
@@ -138,6 +162,8 @@ public final class PartSeat extends APart {
         //Check if gun controlled is still valid.
         if (!gunGroups.containsKey(activeGunItem)) {
             activeGunItem = null;
+            gunIndex = 0;
+        } else if (!activeGunItem.definition.gun.fireSolo || gunIndex < 0 || gunIndex >= gunGroups.get(activeGunItem).size()) {
             gunIndex = 0;
         }
 
@@ -179,7 +205,7 @@ public final class PartSeat extends APart {
             //This prevents the need to select a gun when initially mounting.
             //Only do this if we don't allow for no gun selection, or if the rider is a NPC..
             //If we do have an active gun, validate that it's still correct.
-            if (activeGunItem == null) {
+            if (activeGunItem == null && pendingActiveGunItem == null) {
                 if (!placementDefinition.canDisableGun || !(rider instanceof IWrapperPlayer)) {
                     setNextActiveGun();
                 }
@@ -414,6 +440,7 @@ public final class PartSeat extends APart {
      * see if this rider can control them.  If so, then the active gun is set to that gun type.
      */
     public void setNextActiveGun() {
+        clearPendingActiveGun();
         //If we don't have an active gun, just get the next possible unit.
         if (activeGunItem == null) {
             for (ItemPartGun gunItem : gunGroups.keySet()) {
@@ -428,6 +455,139 @@ public final class PartSeat extends APart {
             activeGunItem = getNextActiveGun();
             gunGroupIndex = 0;
         }
+    }
+
+    /**
+     * Selects a specific gun type and, for fire-solo groups, a specific gun instance.
+     * Returns false if the requested selection is not present on this seat.
+     */
+    public boolean setActiveGun(ItemPartGun gunItem, int gunIndex) {
+        clearPendingActiveGun();
+        return setActiveGunInternal(gunItem, gunIndex);
+    }
+
+    private boolean setActiveGunInternal(ItemPartGun gunItem, int gunIndex) {
+        List<PartGun> gunGroup = gunGroups.get(gunItem);
+        if (gunGroup == null || gunGroup.isEmpty()) {
+            return false;
+        }
+        int selectedGunIndex = gunItem.definition.gun.fireSolo ? gunIndex : 0;
+        if (selectedGunIndex < 0 || selectedGunIndex >= gunGroup.size()) {
+            return false;
+        }
+        activeGunItem = gunItem;
+        this.gunIndex = selectedGunIndex;
+        gunGroupIndex = 0;
+        return true;
+    }
+
+    /**
+     * Applies a server-authoritative selection, retrying after gun groups are rebuilt if necessary.
+     */
+    public void setActiveGunFromPacket(ItemPartGun gunItem, int gunIndex, UUID entityTargetID, UUID engineTargetID) {
+        clearPendingActiveGun();
+        boolean selectionApplied = setActiveGunInternal(gunItem, gunIndex);
+        if (!selectionApplied) {
+            pendingActiveGunItem = gunItem;
+            pendingGunIndex = gunIndex;
+            pendingActiveGunExpirationTick = masterEntity.ticksExisted + PENDING_GUN_SELECTION_TIMEOUT_TICKS;
+        }
+        pendingEntityTargetID = entityTargetID;
+        pendingEngineTargetID = engineTargetID;
+        pendingAITargetUpdate = true;
+        pendingAITargetExpirationTick = masterEntity.ticksExisted + PENDING_AI_TARGET_TIMEOUT_TICKS;
+        if (selectionApplied) {
+            applyPendingAITarget();
+        }
+    }
+
+    private void applyPendingActiveGun() {
+        if (pendingActiveGunItem != null) {
+            if (masterEntity.ticksExisted > pendingActiveGunExpirationTick) {
+                clearPendingGunSelection();
+                clearPendingAITarget();
+            } else if (setActiveGunInternal(pendingActiveGunItem, pendingGunIndex)) {
+                clearPendingGunSelection();
+                applyPendingAITarget();
+            }
+        }
+    }
+
+    private void applyPendingAITarget() {
+        if (pendingAITargetUpdate) {
+            if (masterEntity.ticksExisted > pendingAITargetExpirationTick) {
+                clearPendingAITarget();
+                applyActiveGunTarget(null, null);
+                return;
+            }
+            IWrapperEntity entityTarget = pendingEntityTargetID != null ? world.getExternalEntity(pendingEntityTargetID) : null;
+            PartEngine engineTarget = pendingEngineTargetID != null ? world.getEntity(pendingEngineTargetID) : null;
+            boolean entityTargetResolved = pendingEntityTargetID == null || (entityTarget != null && entityTarget.isValid());
+            boolean engineTargetResolved = pendingEngineTargetID == null || (engineTarget != null && engineTarget.isValid);
+            if (pendingActiveGunItem == null && entityTargetResolved && engineTargetResolved) {
+                clearPendingAITarget();
+                applyActiveGunTarget(entityTarget, engineTarget);
+            }
+        }
+    }
+
+    private void clearPendingGunSelection() {
+        pendingActiveGunItem = null;
+        pendingGunIndex = 0;
+        pendingActiveGunExpirationTick = Long.MIN_VALUE;
+    }
+
+    private void clearPendingAITarget() {
+        pendingEntityTargetID = null;
+        pendingEngineTargetID = null;
+        pendingAITargetUpdate = false;
+        pendingAITargetExpirationTick = Long.MIN_VALUE;
+    }
+
+    private void clearPendingActiveGun() {
+        clearPendingGunSelection();
+        clearPendingAITarget();
+    }
+
+    private void applyActiveGunTarget(IWrapperEntity entityTarget, PartEngine engineTarget) {
+        List<PartGun> activeGunGroup = gunGroups.get(activeGunItem);
+        if (activeGunItem == null || activeGunGroup == null || activeGunGroup.isEmpty()) {
+            return;
+        }
+        if (activeGunItem.definition.gun.fireSolo) {
+            if (gunIndex >= 0 && gunIndex < activeGunGroup.size()) {
+                activeGunGroup.get(gunIndex).setAITarget(entityTarget, engineTarget);
+            }
+        } else {
+            for (PartGun activeGun : activeGunGroup) {
+                IWrapperEntity gunController = activeGun.getGunController();
+                if (rider != null && rider.equals(gunController)) {
+                    activeGun.setAITarget(entityTarget, engineTarget);
+                }
+            }
+        }
+    }
+
+    /**
+     * Claims the single AI weapon-selection decision allowed for this seat during the current master-entity tick.
+     */
+    public boolean claimAIWeaponSelection() {
+        if (lastAIWeaponSelectionTick == masterEntity.ticksExisted) {
+            return false;
+        }
+        lastAIWeaponSelectionTick = masterEntity.ticksExisted;
+        return true;
+    }
+
+    /**
+     * Claims the periodic seat-wide search for a target outside the selected gun's movement arc.
+     */
+    public boolean claimAIWeaponTargetSearch(int intervalTicks) {
+        if (masterEntity.ticksExisted % intervalTicks != 0 || lastAIWeaponTargetSearchTick == masterEntity.ticksExisted) {
+            return false;
+        }
+        lastAIWeaponTargetSearchTick = masterEntity.ticksExisted;
+        return true;
     }
 
     /**
@@ -492,6 +652,7 @@ public final class PartSeat extends APart {
             data.setString("activeGunPackID", activeGunItem.definition.packID);
             data.setString("activeGunSystemName", activeGunItem.definition.systemName);
             data.setString("activeGunSubName", activeGunItem.subDefinition.subName);
+            data.setInteger("activeGunIndex", gunIndex);
         }
         return data;
     }
