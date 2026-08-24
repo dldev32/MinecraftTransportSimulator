@@ -24,10 +24,6 @@ import minecrafttransportsimulator.systems.ControlSystem.ControlsJoystick;
 import minecrafttransportsimulator.systems.LanguageSystem;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.components.Button;
-import net.minecraft.client.gui.screens.PauseScreen;
-import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.client.gui.screens.options.OptionsScreen;
 import net.minecraft.network.chat.Component;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.neoforge.client.event.InputEvent;
@@ -43,10 +39,6 @@ public class InterfaceInput implements IInterfaceInput {
     private static KeyMapping configKey;
     private static KeyMapping importKey;
     private static int lastScrollValue;
-    private static final Component CONFIG_BUTTON_TEXT = Component.literal("IV Config");
-    private static final int CONFIG_BUTTON_WIDTH = 98;
-    private static final int CONFIG_BUTTON_HEIGHT = 20;
-    private static final int CONFIG_BUTTON_MARGIN = 6;
 
     //Joystick variables.
     private static boolean runningJoystickThread = false;
@@ -68,7 +60,7 @@ public class InterfaceInput implements IInterfaceInput {
 
     @Override
     public void initConfigKey() {
-        configKey = new KeyMapping(LanguageSystem.GUI_MASTERCONFIG.getCurrentValue(), GLFW.GLFW_KEY_P, InterfaceLoader.MODNAME);
+        configKey = new KeyMapping(LanguageSystem.GUI_MASTERCONFIG.key, GLFW.GLFW_KEY_P, InterfaceLoader.MODNAME);
         importKey = new KeyMapping(LanguageSystem.GUI_IMPORT.getCurrentValue(), GLFW.GLFW_KEY_UNKNOWN, InterfaceLoader.MODNAME);
     }
 
@@ -220,12 +212,12 @@ public class InterfaceInput implements IInterfaceInput {
     @Override
     public String getJoystickComponentName(String joystickName, int index) {
         if (isJoystickComponentAxis(joystickName, index)) {
-            return "Axis: " + String.valueOf(index);
+            return Component.translatable("gui.config.joystick.component.axis", index).getString();
         } else {
             if (index < joystickAxisCounts.get(joystickName) + joystickHatCounts.get(joystickName)) {
-                return "Hat: " + String.valueOf(index - joystickAxisCounts.get(joystickName));
+                return Component.translatable("gui.config.joystick.component.hat", index - joystickAxisCounts.get(joystickName)).getString();
             } else {
-                return "Button: " + String.valueOf(index - joystickAxisCounts.get(joystickName) - joystickHatCounts.get(joystickName));
+                return Component.translatable("gui.config.joystick.component.button", index - joystickAxisCounts.get(joystickName) - joystickHatCounts.get(joystickName)).getString();
             }
         }
     }
@@ -268,7 +260,14 @@ public class InterfaceInput implements IInterfaceInput {
     public boolean getJoystickButtonValue(String joystickName, int index) {
         //Check to make sure this control is operational before testing.  It could have been removed from a prior game.
         if (joystickMap.containsKey(joystickName)) {
-            return GLFW.glfwGetJoystickButtons(joystickMap.get(joystickName)).get(index - joystickAxisCounts.get(joystickName) - joystickHatCounts.get(joystickName)) == GLFW.GLFW_PRESS;
+            int digitalIndex = index - joystickAxisCounts.get(joystickName);
+            if (digitalIndex < 0) {
+                return false;
+            }
+            if (digitalIndex < joystickHatCounts.get(joystickName)) {
+                return GLFW.glfwGetJoystickHats(joystickMap.get(joystickName)).get(digitalIndex) != GLFW.GLFW_HAT_CENTERED;
+            }
+            return GLFW.glfwGetJoystickButtons(joystickMap.get(joystickName)).get(digitalIndex - joystickHatCounts.get(joystickName)) == GLFW.GLFW_PRESS;
         } else {
             return false;
         }
@@ -298,20 +297,16 @@ public class InterfaceInput implements IInterfaceInput {
 
     @Override
     public String getNameForMouseButton(int mouseButton) {
-        switch (mouseButton) {
-            case GLFW.GLFW_MOUSE_BUTTON_LEFT:
-                return "MOUSE_LEFT";
-            case GLFW.GLFW_MOUSE_BUTTON_RIGHT:
-                return "MOUSE_RIGHT";
-            case GLFW.GLFW_MOUSE_BUTTON_MIDDLE:
-                return "MOUSE_MIDDLE";
-            default:
-                return "MOUSE_" + (mouseButton + 1);
-        }
+        return InputConstants.Type.MOUSE.getOrCreate(mouseButton).getDisplayName().getString();
     }
 
     @Override
     public int getMouseButtonForName(String name) {
+        for (int mouseButton = GLFW.GLFW_MOUSE_BUTTON_1; mouseButton <= GLFW.GLFW_MOUSE_BUTTON_LAST; ++mouseButton) {
+            if (name.equals(getNameForMouseButton(mouseButton))) {
+                return mouseButton;
+            }
+        }
         switch (name) {
             case "MOUSE_LEFT":
                 return GLFW.GLFW_MOUSE_BUTTON_LEFT;
@@ -359,25 +354,6 @@ public class InterfaceInput implements IInterfaceInput {
         } else if (ConfigSystem.settings.general.devMode.value && importKey.isDown()) {
         	EntityManager.doImports(() -> InterfaceManager.clientInterface.getClientPlayer().displayChatMessage(LanguageSystem.SYSTEM_DEBUG, JSONParser.importAllJSONs(true)));
         }
-    }
-
-    @SubscribeEvent
-    public static void onIVScreenInit(ScreenEvent.Init.Post event) {
-        Screen screen = event.getScreen();
-        if (screen instanceof PauseScreen) {
-            if (!((PauseScreen) screen).showsPauseMenu()) {
-                return;
-            }
-            addConfigButton(event, screen);
-        } else if (screen instanceof OptionsScreen) {
-            addConfigButton(event, screen);
-        }
-    }
-
-    private static void addConfigButton(ScreenEvent.Init.Post event, Screen screen) {
-        event.addListener(Button.builder(CONFIG_BUTTON_TEXT, button -> InterfaceClient.openConfigScreen(screen))
-            .bounds(screen.width - CONFIG_BUTTON_WIDTH - CONFIG_BUTTON_MARGIN, CONFIG_BUTTON_MARGIN, CONFIG_BUTTON_WIDTH, CONFIG_BUTTON_HEIGHT)
-            .build());
     }
 
     /**

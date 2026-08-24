@@ -1,12 +1,9 @@
 package mcinterface1211;
 
-import java.io.InputStream;
 import java.lang.reflect.Field;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 
@@ -14,9 +11,9 @@ import org.lwjgl.glfw.GLFW;
 
 import minecrafttransportsimulator.jsondefs.JSONConfigEntry;
 import minecrafttransportsimulator.mcinterface.InterfaceManager;
-import minecrafttransportsimulator.packloading.JSONParser;
 import minecrafttransportsimulator.systems.ConfigSystem;
 import minecrafttransportsimulator.systems.ControlSystem;
+import minecrafttransportsimulator.systems.ControlSystem.FlightControlMode;
 import minecrafttransportsimulator.systems.ControlSystem.ControlsJoystick;
 import minecrafttransportsimulator.systems.ControlSystem.ControlsKeyboard;
 import minecrafttransportsimulator.systems.ControlSystem.ControlsKeyboardDynamic;
@@ -25,6 +22,7 @@ import minecrafttransportsimulator.systems.LanguageSystem.LanguageEntry;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.components.AbstractSliderButton;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.ContainerObjectSelectionList;
@@ -46,6 +44,7 @@ public class MCConfigScreen extends Screen {
     private static final int TAB_WIDTH = 98;
     private static final int WIDE_BUTTON_WIDTH = 150;
     private static final int VALUE_BUTTON_WIDTH = 105;
+    private static final int VOLUME_SLIDER_WIDTH = 200;
     private static final int RESET_BUTTON_WIDTH = 60;
     private static final int ROW_HEIGHT = 24;
     private static final int HEADER_HEIGHT = 56;
@@ -53,8 +52,7 @@ public class MCConfigScreen extends Screen {
     private static final int LABEL_COLOR = 0xE0E0E0;
     private static final int MUTED_COLOR = 0xA0A0A0;
     private static final int ERROR_COLOR = 0xFF5555;
-    private static final Component TITLE = Component.literal(InterfaceLoader.MODNAME + " Config");
-    private static final Map<String, Map<String, String>> LANGUAGE_CACHE = new HashMap<>();
+    private static final Component TITLE = Component.translatable("gui.config.title");
 
     private final Screen parentScreen;
     private ConfigList list;
@@ -91,14 +89,16 @@ public class MCConfigScreen extends Screen {
     }
 
     private void addHeaderButtons() {
-        int totalWidth = TAB_WIDTH * 3 + 8;
+        int tabWidth = Math.min(118, Math.max(44, (width - 40) / 4));
+        int totalWidth = tabWidth * 4 + 12;
         int x = width / 2 - totalWidth / 2;
-        addTabButton(Tab.RENDERING, x, translate(LanguageSystem.GUI_CONFIG_HEADER_RENDERING));
-        addTabButton(Tab.CONFIG, x + TAB_WIDTH + 4, translate(LanguageSystem.GUI_CONFIG_HEADER_CONFIG));
-        addTabButton(Tab.CONTROLS, x + (TAB_WIDTH + 4) * 2, translate(LanguageSystem.GUI_CONFIG_HEADER_CONTROLS));
+        addTabButton(Tab.RENDERING, x, tabWidth, translate(LanguageSystem.GUI_CONFIG_HEADER_RENDERING));
+        addTabButton(Tab.CLIENT, x + tabWidth + 4, tabWidth, translate(LanguageSystem.GUI_CONFIG_HEADER_CONFIG));
+        addTabButton(Tab.SERVER, x + (tabWidth + 4) * 2, tabWidth, translate(LanguageSystem.GUI_CONFIG_HEADER_SERVER));
+        addTabButton(Tab.CONTROLS, x + (tabWidth + 4) * 3, tabWidth, translate(LanguageSystem.GUI_CONFIG_HEADER_CONTROLS));
     }
 
-    private void addTabButton(Tab newTab, int x, Component label) {
+    private void addTabButton(Tab newTab, int x, int tabWidth, Component label) {
         Button button = Button.builder(label, pressed -> {
             tab = newTab;
             controlMode = ControlMode.ROOT;
@@ -107,16 +107,21 @@ public class MCConfigScreen extends Screen {
             selectedJoystickComponent = -1;
             calibratingControl = null;
             rebuildWidgets();
-        }).bounds(x, 30, TAB_WIDTH, BUTTON_HEIGHT).build();
+        }).bounds(x, 30, tabWidth, BUTTON_HEIGHT).build();
         button.active = tab != newTab || (tab == Tab.CONTROLS && controlMode != ControlMode.ROOT);
+        if (font.width(label) > tabWidth - 8) {
+            button.setTooltip(Tooltip.create(label));
+        }
         addRenderableWidget(button);
     }
 
     private void populateList() {
         if (tab == Tab.RENDERING) {
             addConfigRows(ConfigSystem.client.renderingSettings);
-        } else if (tab == Tab.CONFIG) {
-            addConfigRows(ConfigSystem.client.controlSettings);
+        } else if (tab == Tab.CLIENT) {
+            addClientSettings();
+        } else if (tab == Tab.SERVER) {
+            addServerSettings();
         } else if (controlMode == ControlMode.ROOT) {
             addControlRoot();
         } else if (controlMode == ControlMode.KEYBOARD) {
@@ -164,10 +169,54 @@ public class MCConfigScreen extends Screen {
         }
     }
 
+    private void addConfigRows(Object configObject, boolean editable, String... fieldNames) {
+        for (String fieldName : fieldNames) {
+            ConfigRow row = getConfigRow(configObject, fieldName);
+            if (row != null) {
+                list.addConfigEntry(new ConfigEntry(row, editable));
+            }
+        }
+    }
+
+    private void addClientSettings() {
+        list.addConfigEntry(new CategoryEntry(Component.translatable("gui.config.category.client.general")));
+        addConfigRows(ConfigSystem.client.controlSettings, true,
+            "north360", "showAimHelper", "showTutorial", "showHoverTxt", "cullingWarn");
+        list.addConfigEntry(new CategoryEntry(Component.translatable("gui.config.category.client.audio")));
+        addConfigRows(ConfigSystem.client.controlSettings, true, "soundVolume", "radioVolume");
+    }
+
+    private void addServerSettings() {
+        boolean editable = !isRemoteServer();
+        if (!editable) {
+            list.addConfigEntry(new TextEntry(Component.translatable("gui.config.server.remote_read_only").getString()));
+        }
+        list.addConfigEntry(new CategoryEntry(Component.translatable("gui.config.category.server.general")));
+        for (ConfigRow row : getConfigRows(ConfigSystem.settings.general)) {
+            list.addConfigEntry(new ConfigEntry(row, editable));
+        }
+        list.addConfigEntry(new CategoryEntry(Component.translatable("gui.config.category.server.damage")));
+        for (ConfigRow row : getConfigRows(ConfigSystem.settings.damage)) {
+            list.addConfigEntry(new ConfigEntry(row, editable));
+        }
+        list.addConfigEntry(new CategoryEntry(Component.translatable("gui.config.category.server.advanced")));
+        list.addConfigEntry(new TextEntry(Component.translatable("gui.config.server.advanced_json").getString()));
+    }
+
+    private boolean isRemoteServer() {
+        Minecraft minecraft = Minecraft.getInstance();
+        return minecraft.getConnection() != null && !minecraft.hasSingleplayerServer();
+    }
+
     private void addControlRoot() {
+        list.addConfigEntry(new CategoryEntry(Component.translatable("gui.config.category.controls.behavior")));
+        list.addConfigEntry(new ControlSchemeEntry());
+        addConfigRows(ConfigSystem.client.controlSettings, true, "autostartEng", "DismountSafteySpeed");
+
+        list.addConfigEntry(new CategoryEntry(Component.translatable("gui.config.category.controls.bindings")));
         list.addConfigEntry(new DualButtonEntry(
-            modeLabel(LanguageSystem.GUI_CONFIG_CONTROLS_GENERAL_KEYBOARD, "Keyboard"),
-            modeLabel(LanguageSystem.GUI_CONFIG_CONTROLS_GENERAL_JOYSTICK, "Joystick"),
+            Component.translatable("gui.config.controls.mode.keyboard"),
+            Component.translatable("gui.config.controls.mode.joystick"),
             button -> {
                 controlMode = ControlMode.KEYBOARD;
                 rebuildWidgets();
@@ -179,13 +228,23 @@ public class MCConfigScreen extends Screen {
                 rebuildWidgets();
             }
         ));
+
+        list.addConfigEntry(new CategoryEntry(Component.translatable("gui.config.category.controls.ground")));
+        addConfigRows(ConfigSystem.client.controlSettings, true,
+            "simpleThrottle", "halfThrottle", "autoTrnSignals", "steeringControlRate", "steeringReturnRate");
+
+        list.addConfigEntry(new CategoryEntry(Component.translatable("gui.config.category.controls.aircraft")));
+        addConfigRows(ConfigSystem.client.controlSettings, true, "heliAutoLevel", "flightControlRate", "mouseYokeRate");
+
+        list.addConfigEntry(new CategoryEntry(Component.translatable("gui.config.category.controls.input")));
+        addConfigRows(ConfigSystem.client.controlSettings, true, "kbOverride", "useShifter", "classicJystk", "joystickDeadZone");
     }
 
     private void addKeyboardRows() {
-        addKeyboardRows(categoryLabel(ControlType.GENERAL.categoryLanguage), control -> ControlType.fromSystemName(control.systemName) == ControlType.GENERAL);
+        addKeyboardRows(categoryLabel(ControlType.GENERAL), control -> ControlType.fromSystemName(control.systemName) == ControlType.GENERAL);
         addSharedVehicleKeyboardRows();
-        addKeyboardRows(categoryLabel(ControlType.CAR.categoryLanguage), control -> ControlType.fromSystemName(control.systemName) == ControlType.CAR && !isSharedVehicleKeyboardControl(control));
-        addKeyboardRows(categoryLabel(ControlType.AIRCRAFT.categoryLanguage), control -> ControlType.fromSystemName(control.systemName) == ControlType.AIRCRAFT && !isSharedVehicleKeyboardControl(control));
+        addKeyboardRows(categoryLabel(ControlType.CAR), control -> ControlType.fromSystemName(control.systemName) == ControlType.CAR && !isSharedVehicleKeyboardControl(control));
+        addKeyboardRows(categoryLabel(ControlType.AIRCRAFT), control -> ControlType.fromSystemName(control.systemName) == ControlType.AIRCRAFT && !isSharedVehicleKeyboardControl(control));
         list.addConfigEntry(new CategoryEntry(Component.literal("")));
         for (ControlsKeyboardDynamic dynamicControl : ControlsKeyboardDynamic.values()) {
             list.addConfigEntry(new TextEntry(translate(dynamicControl.language).getString() + ": " + bindingName(dynamicControl.modControl) + " + " + bindingName(dynamicControl.mainControl)));
@@ -211,7 +270,7 @@ public class MCConfigScreen extends Screen {
         for (ControlsKeyboard control : ControlsKeyboard.values()) {
             if (isSharedVehicleKeyboardControl(control) && !addedLanguages.contains(control.language)) {
                 if (!addedCategory) {
-                    list.addConfigEntry(new CategoryEntry(sharedVehicleControlsLabel()));
+                    list.addConfigEntry(new CategoryEntry(Component.translatable("gui.config.controls.category.shared_vehicle")));
                     addedCategory = true;
                 }
                 addedLanguages.add(control.language);
@@ -234,10 +293,10 @@ public class MCConfigScreen extends Screen {
 
         List<String> joysticks = InterfaceManager.inputInterface.getAllJoystickNames();
         if (joysticks.isEmpty()) {
-            list.addConfigEntry(new TextEntry("No joysticks found"));
+            list.addConfigEntry(new TextEntry(Component.translatable("gui.config.joystick.none").getString()));
         }
         for (String joystickName : joysticks) {
-            list.addConfigEntry(new ActionEntry(Component.literal(joystickName), Component.literal("Select"), button -> {
+            list.addConfigEntry(new ActionEntry(Component.literal(joystickName), Component.translatable("gui.config.joystick.select_button"), button -> {
                 selectedJoystickName = joystickName;
                 selectedJoystickComponent = -1;
                 controlMode = ControlMode.JOYSTICK_COMPONENT;
@@ -256,7 +315,7 @@ public class MCConfigScreen extends Screen {
         int componentCount = InterfaceManager.inputInterface.getJoystickComponentCount(selectedJoystickName);
         for (int i = 0; i < componentCount; ++i) {
             int componentIndex = i;
-            list.addConfigEntry(new ActionEntry(() -> Component.literal(String.format(Locale.ROOT, "%02d  %s  %s", componentIndex + 1, InterfaceManager.inputInterface.getJoystickComponentName(selectedJoystickName, componentIndex), currentJoystickValue(componentIndex))), translate(LanguageSystem.GUI_CONFIG_JOYSTICK_MAPPING), button -> {
+            list.addConfigEntry(new ActionEntry(() -> Component.literal(String.format(Locale.ROOT, "%02d  %s  %s", componentIndex + 1, InterfaceManager.inputInterface.getJoystickComponentName(selectedJoystickName, componentIndex), currentJoystickValue(componentIndex))), Component.translatable("gui.config.joystick.configure"), button -> {
                 selectedJoystickComponent = componentIndex;
                 controlMode = ControlMode.JOYSTICK_ASSIGNMENT;
                 rebuildWidgets();
@@ -271,10 +330,10 @@ public class MCConfigScreen extends Screen {
             if (control.isAxis == axis) {
                 ControlType type = ControlType.fromSystemName(control.systemName);
                 if (type != lastType) {
-                    list.addConfigEntry(new CategoryEntry(categoryLabel(type.categoryLanguage)));
+                    list.addConfigEntry(new CategoryEntry(categoryLabel(type)));
                     lastType = type;
                 }
-                Component buttonText = controlUsesSelectedComponent(control) ? translate(LanguageSystem.GUI_CONFIG_JOYSTICK_CLEAR) : translate(LanguageSystem.GUI_CONFIG_JOYSTICK_MAPPING);
+                Component buttonText = controlUsesSelectedComponent(control) ? translate(LanguageSystem.GUI_CONFIG_JOYSTICK_CLEAR) : Component.translatable("gui.config.joystick.map");
                 list.addConfigEntry(new ActionEntry(translate(control.language), buttonText, button -> {
                     if (controlUsesSelectedComponent(control)) {
                         control.clearControl();
@@ -295,10 +354,16 @@ public class MCConfigScreen extends Screen {
         calibrationMin = Math.min(calibrationMin, currentValue);
         calibrationMax = Math.max(calibrationMax, currentValue);
 
-        list.addConfigEntry(new TextEntry(() -> String.format(Locale.ROOT, "%s  Current: %.3f  Min: %.3f  Max: %.3f", translate(calibratingControl.language).getString(), InterfaceManager.inputInterface.getJoystickAxisValue(selectedJoystickName, selectedJoystickComponent), calibrationMin, calibrationMax)));
+        list.addConfigEntry(new TextEntry(() -> Component.translatable(
+            "gui.config.joystick.calibration_values",
+            translate(calibratingControl.language),
+            String.format(Locale.ROOT, "%.3f", InterfaceManager.inputInterface.getJoystickAxisValue(selectedJoystickName, selectedJoystickComponent)),
+            String.format(Locale.ROOT, "%.3f", calibrationMin),
+            String.format(Locale.ROOT, "%.3f", calibrationMax)
+        ).getString()));
         list.addConfigEntry(new TripleButtonEntry(
-            Component.literal("Set Min"),
-            Component.literal("Set Max"),
+            Component.translatable("gui.config.joystick.set_min"),
+            Component.translatable("gui.config.joystick.set_max"),
             calibrationInverted ? translate(LanguageSystem.GUI_CONFIG_JOYSTICK_INVERT) : translate(LanguageSystem.GUI_CONFIG_JOYSTICK_NORMAL),
             button -> {
                 calibrationMin = InterfaceManager.inputInterface.getJoystickAxisValue(selectedJoystickName, selectedJoystickComponent);
@@ -362,15 +427,11 @@ public class MCConfigScreen extends Screen {
         Object value = row.entry.value;
         if (value instanceof Boolean) {
             Button button = Button.builder(booleanText((Boolean) value), pressed -> {
-                if ("mouseYoke".equals(row.name)) {
-                    ControlSystem.toggleMouseYoke();
-                } else {
-                    setEntryValue(row, !(Boolean) row.entry.value);
-                    ConfigSystem.saveToDisk();
-                }
+                setEntryValue(row, !(Boolean) row.entry.value);
+                ConfigSystem.saveToDisk();
                 updateConfigWidget(row, pressed);
             }).bounds(0, 0, VALUE_BUTTON_WIDTH, BUTTON_HEIGHT).build();
-            button.setTooltip(Tooltip.create(Component.literal(row.entry.comment)));
+            button.setTooltip(Tooltip.create(configOptionTooltip(row)));
             return button;
         } else if ("renderingMode".equals(row.name) && value instanceof Integer) {
             Button button = Button.builder(renderingModeText((Integer) value), pressed -> {
@@ -379,19 +440,21 @@ public class MCConfigScreen extends Screen {
                 ConfigSystem.saveToDisk();
                 updateConfigWidget(row, pressed);
             }).bounds(0, 0, VALUE_BUTTON_WIDTH, BUTTON_HEIGHT).build();
-            button.setTooltip(Tooltip.create(Component.literal(row.entry.comment)));
+            button.setTooltip(Tooltip.create(configOptionTooltip(row)));
             return button;
+        } else if (("soundVolume".equals(row.name) || "radioVolume".equals(row.name)) && value instanceof Float) {
+            return new VolumeSlider(row);
         } else if (value instanceof Number) {
-            EditBox box = new EditBox(font, 0, 0, VALUE_BUTTON_WIDTH, BUTTON_HEIGHT, Component.literal(row.name));
+            EditBox box = new EditBox(font, 0, 0, VALUE_BUTTON_WIDTH, BUTTON_HEIGHT, configOptionLabel(row));
             box.setValue(String.valueOf(value));
             box.setMaxLength(32);
-            box.setTooltip(Tooltip.create(Component.literal(row.entry.comment)));
+            box.setTooltip(Tooltip.create(configOptionTooltip(row)));
             box.setResponder(text -> updateNumberEntry(row, box, text));
             return box;
         } else {
-            Button button = Button.builder(Component.literal("JSON only"), pressed -> {}).bounds(0, 0, VALUE_BUTTON_WIDTH, BUTTON_HEIGHT).build();
+            Button button = Button.builder(Component.translatable("gui.config.value.json_only"), pressed -> {}).bounds(0, 0, VALUE_BUTTON_WIDTH, BUTTON_HEIGHT).build();
             button.active = false;
-            button.setTooltip(Tooltip.create(Component.literal(row.entry.comment)));
+            button.setTooltip(Tooltip.create(configOptionTooltip(row)));
             return button;
         }
     }
@@ -436,6 +499,18 @@ public class MCConfigScreen extends Screen {
             }
         }
         return rows;
+    }
+
+    private ConfigRow getConfigRow(Object configObject, String fieldName) {
+        try {
+            Field field = configObject.getClass().getField(fieldName);
+            if (field.getType().equals(JSONConfigEntry.class)) {
+                return new ConfigRow(fieldName, (JSONConfigEntry<?>) field.get(configObject));
+            }
+        } catch (NoSuchFieldException | IllegalAccessException e) {
+            //Public config fields should always be readable; skip fields removed by older/newer schemas.
+        }
+        return null;
     }
 
     @Override
@@ -492,6 +567,7 @@ public class MCConfigScreen extends Screen {
 
     @Override
     public void onClose() {
+        ConfigSystem.saveToDisk();
         Minecraft.getInstance().setScreen(parentScreen);
     }
 
@@ -502,7 +578,7 @@ public class MCConfigScreen extends Screen {
 
     private String bindingName(ControlsKeyboard control) {
         if (control.config.keyCode < 0 || (control.config.keyCode == 0 && !control.config.isMouseButton)) {
-            return "NONE";
+            return Component.translatable("gui.config.value.unbound").getString();
         }
         return control.config.isMouseButton ? InterfaceManager.inputInterface.getNameForMouseButton(control.config.keyCode) : InterfaceManager.inputInterface.getNameForKeyCode(control.config.keyCode);
     }
@@ -587,7 +663,7 @@ public class MCConfigScreen extends Screen {
         if (InterfaceManager.inputInterface.isJoystickComponentAxis(selectedJoystickName, componentIndex)) {
             return String.format(Locale.ROOT, "%.2f", InterfaceManager.inputInterface.getJoystickAxisValue(selectedJoystickName, componentIndex));
         }
-        return InterfaceManager.inputInterface.getJoystickButtonValue(selectedJoystickName, componentIndex) ? "ON" : "OFF";
+        return Component.translatable(InterfaceManager.inputInterface.getJoystickButtonValue(selectedJoystickName, componentIndex) ? "options.on" : "options.off").getString();
     }
 
     private String getComponentAssignments(int componentIndex) {
@@ -611,7 +687,7 @@ public class MCConfigScreen extends Screen {
     }
 
     private Component booleanText(boolean value) {
-        return Component.literal(String.valueOf(value));
+        return Component.translatable(value ? "options.on" : "options.off");
     }
 
     private Component renderingModeText(int value) {
@@ -625,37 +701,30 @@ public class MCConfigScreen extends Screen {
         }
     }
 
+    private Component controlSchemeText(FlightControlMode mode) {
+        switch (mode) {
+            case MOUSE:
+                return Component.translatable("gui.config.control_scheme.mouse");
+            case ARCADE:
+                return Component.translatable("gui.config.control_scheme.arcade");
+            default:
+                return Component.translatable("gui.config.control_scheme.manual");
+        }
+    }
+
     private Component translate(LanguageEntry entry) {
         if (entry.key == null) {
             return Component.literal(entry.getCurrentValue());
         }
-        String manualValue = getManualTranslation(entry.key);
-        if (manualValue != null) {
-            return Component.literal(manualValue);
-        }
         return Component.translatableWithFallback(entry.key, entry.getCurrentValue());
     }
 
-    private String getManualTranslation(String key) {
-        String language = InterfaceManager.clientInterface.getLanguageName();
-        Map<String, String> values = LANGUAGE_CACHE.computeIfAbsent(language, this::loadManualTranslations);
-        return values.get(key);
+    private Component configOptionLabel(ConfigRow row) {
+        return Component.translatableWithFallback("gui.config.option." + row.name + ".label", row.name);
     }
 
-    private Map<String, String> loadManualTranslations(String language) {
-        Map<String, String> values = new HashMap<>();
-        String filePath = "/assets/" + InterfaceManager.coreModID + "/language/" + language + ".json";
-        try (InputStream stream = InterfaceManager.coreInterface.getPackResource(filePath)) {
-            if (stream != null) {
-                LanguageSystem.JSONLanguageFile languageFile = JSONParser.parseStream(stream, LanguageSystem.JSONLanguageFile.class, null, null);
-                if (languageFile.entries != null) {
-                    values.putAll(languageFile.entries);
-                }
-            }
-        } catch (Exception e) {
-            //Fallback to the defaults embedded in LanguageEntry.
-        }
-        return values;
+    private Component configOptionTooltip(ConfigRow row) {
+        return Component.translatableWithFallback("gui.config.option." + row.name + ".tooltip", row.entry.comment);
     }
 
     private String trimToWidth(String text, int maxWidth) {
@@ -665,38 +734,14 @@ public class MCConfigScreen extends Screen {
         return font.plainSubstrByWidth(text, Math.max(0, maxWidth - font.width("..."))) + "...";
     }
 
-    private Component modeLabel(LanguageEntry entry, String fallbackMode) {
-        String text = translate(entry).getString().trim();
-        int openIndex = text.indexOf('(');
-        int closeIndex = text.indexOf(')', openIndex + 1);
-        if (openIndex != -1 && closeIndex != -1) {
-            return Component.literal(text.substring(openIndex + 1, closeIndex).trim());
-        }
-        int spaceIndex = text.lastIndexOf(' ');
-        return Component.literal(spaceIndex != -1 ? text.substring(spaceIndex + 1).trim() : fallbackMode);
-    }
-
-    private Component sharedVehicleControlsLabel() {
-        return Component.literal(categoryLabel(ControlType.CAR.categoryLanguage).getString() + " / " + categoryLabel(ControlType.AIRCRAFT.categoryLanguage).getString());
-    }
-
-    private Component categoryLabel(LanguageEntry entry) {
-        String text = translate(entry).getString().trim();
-        int openIndex = text.indexOf('(');
-        if (openIndex != -1) {
-            text = text.substring(0, openIndex).trim();
-        }
-        if (text.endsWith(" KEYBOARD")) {
-            text = text.substring(0, text.length() - " KEYBOARD".length()).trim();
-        } else if (text.endsWith(" JOYSTICK")) {
-            text = text.substring(0, text.length() - " JOYSTICK".length()).trim();
-        }
-        return Component.literal(text);
+    private Component categoryLabel(ControlType type) {
+        return Component.translatable(type.categoryKey);
     }
 
     private enum Tab {
         RENDERING,
-        CONFIG,
+        CLIENT,
+        SERVER,
         CONTROLS
     }
 
@@ -710,16 +755,16 @@ public class MCConfigScreen extends Screen {
     }
 
     private enum ControlType {
-        GENERAL("general", LanguageSystem.GUI_CONFIG_CONTROLS_GENERAL_KEYBOARD),
-        AIRCRAFT("aircraft", LanguageSystem.GUI_CONFIG_CONTROLS_AIRCRAFT_KEYBOARD),
-        CAR("car", LanguageSystem.GUI_CONFIG_CONTROLS_CAR_KEYBOARD);
+        GENERAL("general", "gui.config.controls.category.general"),
+        AIRCRAFT("aircraft", "gui.config.controls.category.aircraft"),
+        CAR("car", "gui.config.controls.category.car");
 
         private final String prefix;
-        private final LanguageEntry categoryLanguage;
+        private final String categoryKey;
 
-        ControlType(String prefix, LanguageEntry categoryLanguage) {
+        ControlType(String prefix, String categoryKey) {
             this.prefix = prefix;
-            this.categoryLanguage = categoryLanguage;
+            this.categoryKey = categoryKey;
         }
 
         private static ControlType fromSystemName(String systemName) {
@@ -798,7 +843,11 @@ public class MCConfigScreen extends Screen {
         @Override
         public void render(GuiGraphics guiGraphics, int index, int top, int left, int width, int height, int mouseX, int mouseY, boolean hovering, float partialTick) {
             String text = textSupplier.get();
-            guiGraphics.drawCenteredString(font, trimToWidth(text, width), MCConfigScreen.this.width / 2, top + height / 2 - 4, MUTED_COLOR);
+            String visibleText = trimToWidth(text, width);
+            guiGraphics.drawCenteredString(font, visibleText, MCConfigScreen.this.width / 2, top + height / 2 - 4, MUTED_COLOR);
+            if (!visibleText.equals(text) && mouseX >= left && mouseX <= left + width && mouseY >= top && mouseY <= top + height) {
+                guiGraphics.renderTooltip(font, Component.literal(text), mouseX, mouseY);
+            }
         }
     }
 
@@ -863,23 +912,99 @@ public class MCConfigScreen extends Screen {
         }
     }
 
+    private class ControlSchemeEntry extends ListEntry {
+        private final Button button;
+
+        private ControlSchemeEntry() {
+            button = Button.builder(controlSchemeText(ControlSystem.getFlightControlMode()), pressed -> {
+                ControlSystem.cycleFlightControlMode(false);
+                pressed.setMessage(controlSchemeText(ControlSystem.getFlightControlMode()));
+            }).bounds(0, 0, VALUE_BUTTON_WIDTH, BUTTON_HEIGHT).build();
+            button.setTooltip(Tooltip.create(Component.translatable("gui.config.control_scheme.tooltip")));
+        }
+
+        @Override
+        public void render(GuiGraphics guiGraphics, int index, int top, int left, int width, int height, int mouseX, int mouseY, boolean hovering, float partialTick) {
+            int buttonX = MCConfigScreen.this.list.scrollbarX() - button.getWidth() - 10;
+            int labelMaxWidth = Math.max(40, buttonX - left - 8);
+            Component label = Component.translatable("gui.config.control_scheme.label");
+            String visibleLabel = trimToWidth(label.getString(), labelMaxWidth);
+            guiGraphics.drawString(font, visibleLabel, left, top + height / 2 - 4, LABEL_COLOR, false);
+            if (mouseX >= left && mouseX <= left + font.width(visibleLabel) && mouseY >= top && mouseY <= top + height) {
+                guiGraphics.renderTooltip(font, Component.translatable("gui.config.control_scheme.tooltip"), mouseX, mouseY);
+            }
+            button.setPosition(buttonX, top - 2);
+            button.render(guiGraphics, mouseX, mouseY, partialTick);
+        }
+
+        @Override
+        public List<? extends GuiEventListener> children() {
+            return List.of(button);
+        }
+
+        @Override
+        public List<? extends NarratableEntry> narratables() {
+            return List.of(button);
+        }
+    }
+
+    private class VolumeSlider extends AbstractSliderButton {
+        private final ConfigRow row;
+
+        private VolumeSlider(ConfigRow row) {
+            super(0, 0, VOLUME_SLIDER_WIDTH, BUTTON_HEIGHT, Component.empty(), Math.max(0.0D, Math.min(1.0D, ((Number) row.entry.value).doubleValue() / 1.5D)));
+            this.row = row;
+            setTooltip(Tooltip.create(configOptionTooltip(row)));
+            updateMessage();
+        }
+
+        @Override
+        protected void updateMessage() {
+            if (row != null) {
+                int percent = Math.round(((Number) row.entry.value).floatValue() * 100.0F);
+                setMessage(Component.translatable("options.percent_value", configOptionLabel(row), percent));
+            }
+        }
+
+        @Override
+        protected void applyValue() {
+            float newVolume = Math.round(value * 15.0D) / 10.0F;
+            float currentVolume = ((Number) row.entry.value).floatValue();
+            if (Float.compare(newVolume, currentVolume) != 0) {
+                setEntryValue(row, newVolume);
+                ConfigSystem.saveToDisk();
+            }
+            updateMessage();
+        }
+    }
+
     private class ConfigEntry extends ListEntry {
         private final ConfigRow row;
         private final AbstractWidget widget;
 
         private ConfigEntry(ConfigRow row) {
+            this(row, true);
+        }
+
+        private ConfigEntry(ConfigRow row, boolean editable) {
             this.row = row;
             this.widget = createConfigWidget(row);
+            this.widget.active &= editable;
         }
 
         @Override
         public void render(GuiGraphics guiGraphics, int index, int top, int left, int width, int height, int mouseX, int mouseY, boolean hovering, float partialTick) {
+            if (widget instanceof VolumeSlider) {
+                widget.setPosition(MCConfigScreen.this.width / 2 - widget.getWidth() / 2, top - 2);
+                widget.render(guiGraphics, mouseX, mouseY, partialTick);
+                return;
+            }
             int widgetX = MCConfigScreen.this.list.scrollbarX() - widget.getWidth() - 10;
             int labelMaxWidth = Math.max(40, widgetX - left - 8);
-            String label = trimToWidth(row.name, labelMaxWidth);
+            String label = trimToWidth(configOptionLabel(row).getString(), labelMaxWidth);
             guiGraphics.drawString(font, label, left, top + height / 2 - 4, LABEL_COLOR, false);
             if (row.entry.comment != null && mouseX >= left && mouseX <= left + font.width(label) && mouseY >= top && mouseY <= top + height) {
-                guiGraphics.renderTooltip(font, Component.literal(row.entry.comment), mouseX, mouseY);
+                guiGraphics.renderTooltip(font, configOptionTooltip(row), mouseX, mouseY);
             }
             widget.setPosition(widgetX, top - 2);
             widget.render(guiGraphics, mouseX, mouseY, partialTick);

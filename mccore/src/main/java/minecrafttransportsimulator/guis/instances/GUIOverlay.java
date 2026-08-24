@@ -143,7 +143,7 @@ public class GUIOverlay extends AGUIBase {
             }
 
             // Update the aiming crosshair position when a gun is active.
-            if (activeGunGroup != null && ConfigSystem.client.controlSettings.arcadeMode.value) {
+            if (activeGunGroup != null && ConfigSystem.client.controlSettings.arcadeMode.value && ConfigSystem.client.controlSettings.showAimHelper.value) {
                 updateAimingCrosshair(activeGunGroup, player.getWorld());
             }
         }

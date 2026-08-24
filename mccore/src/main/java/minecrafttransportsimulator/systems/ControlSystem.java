@@ -55,6 +55,12 @@ public final class ControlSystem {
 
     private static EntityInteractResult interactResult = null;
 
+    public enum FlightControlMode {
+        MANUAL,
+        MOUSE,
+        ARCADE
+    }
+
     /**
      * Static initializer for the IWrapper inputs, as we need to iterate through the enums to initialize them
      * prior to using them in any of the methods contained in this IWrapper (cause they'll be null).
@@ -110,6 +116,54 @@ public final class ControlSystem {
         mouseYokePosY = Double.NaN;
     }
 
+    public static FlightControlMode getFlightControlMode() {
+        if (ConfigSystem.client.controlSettings.arcadeMode.value) {
+            return FlightControlMode.ARCADE;
+        } else if (ConfigSystem.client.controlSettings.mouseYoke.value) {
+            return FlightControlMode.MOUSE;
+        } else {
+            return FlightControlMode.MANUAL;
+        }
+    }
+
+    public static void setFlightControlMode(FlightControlMode mode, boolean displayMessage) {
+        boolean mouseMode = mode == FlightControlMode.MOUSE;
+        boolean arcadeMode = mode == FlightControlMode.ARCADE;
+        boolean changed = ConfigSystem.client.controlSettings.mouseYoke.value != mouseMode
+                || ConfigSystem.client.controlSettings.arcadeMode.value != arcadeMode;
+        ConfigSystem.client.controlSettings.mouseYoke.value = mouseMode;
+        ConfigSystem.client.controlSettings.arcadeMode.value = arcadeMode;
+        mouseYokeEnabledLastCall = mouseMode;
+        resetMouseYoke();
+        if (!arcadeMode && MouseFlightController.isMouseFlightActive) {
+            MouseFlightController.deactivate();
+        }
+        if (changed) {
+            ConfigSystem.saveToDisk();
+        }
+        if (displayMessage && InterfaceManager.clientInterface != null) {
+            LanguageEntry message;
+            switch (mode) {
+                case MOUSE:
+                    message = LanguageSystem.INTERACT_CONTROLMODE_MOUSE;
+                    break;
+                case ARCADE:
+                    message = LanguageSystem.INTERACT_CONTROLMODE_ARCADE;
+                    break;
+                default:
+                    message = LanguageSystem.INTERACT_CONTROLMODE_MANUAL;
+                    break;
+            }
+            InterfaceManager.clientInterface.displayOverlayMessage(message.getCurrentValue());
+        }
+    }
+
+    public static void cycleFlightControlMode(boolean displayMessage) {
+        FlightControlMode currentMode = getFlightControlMode();
+        FlightControlMode[] modes = FlightControlMode.values();
+        setFlightControlMode(modes[(currentMode.ordinal() + 1) % modes.length], displayMessage);
+    }
+
     /**
      * Returns true when vanilla use-item handling should be suppressed because the player is
      * targeting an IV click hitbox.  IV handles these clicks separately in {@link #handleClick},
@@ -126,17 +180,12 @@ public final class ControlSystem {
     }
 
     public static void setMouseYokeEnabled(boolean enabled, boolean displayMessage) {
-        ConfigSystem.client.controlSettings.mouseYoke.value = enabled;
-        ConfigSystem.saveToDisk();
-        resetMouseYoke();
-        mouseYokeEnabledLastCall = enabled;
-        if (displayMessage && InterfaceManager.clientInterface != null) {
-            InterfaceManager.clientInterface.displayOverlayMessage((enabled ? LanguageSystem.INTERACT_MOUSEYOKE_ENABLED : LanguageSystem.INTERACT_MOUSEYOKE_DISABLED).getCurrentValue());
-        }
+        FlightControlMode currentMode = getFlightControlMode();
+        setFlightControlMode(enabled ? FlightControlMode.MOUSE : currentMode == FlightControlMode.MOUSE ? FlightControlMode.MANUAL : currentMode, displayMessage);
     }
 
     public static void toggleMouseYoke() {
-        setMouseYokeEnabled(!ConfigSystem.client.controlSettings.mouseYoke.value, true);
+        setFlightControlMode(getFlightControlMode() == FlightControlMode.MOUSE ? FlightControlMode.MANUAL : FlightControlMode.MOUSE, true);
     }
 
     public static boolean shouldSuppressDismount(IWrapperPlayer player, boolean dismountRequested) {
@@ -520,9 +569,7 @@ public final class ControlSystem {
         }
 
         if (ControlsKeyboard.AIRCRAFT_ARCADE.isPressed()) {
-            ConfigSystem.client.controlSettings.arcadeMode.value = !ConfigSystem.client.controlSettings.arcadeMode.value;
-            ConfigSystem.saveToDisk();
-            InterfaceManager.clientInterface.displayOverlayMessage((ConfigSystem.client.controlSettings.arcadeMode.value ? LanguageSystem.INTERACT_ARCADEMODE_ENABLED : LanguageSystem.INTERACT_ARCADEMODE_DISABLED).getCurrentValue());
+            cycleFlightControlMode(true);
         }
 
         //Open or close the panel.
