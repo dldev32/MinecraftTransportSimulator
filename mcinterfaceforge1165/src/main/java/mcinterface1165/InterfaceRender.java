@@ -35,6 +35,7 @@ import minecrafttransportsimulator.rendering.RenderableData;
 import minecrafttransportsimulator.systems.ConfigSystem;
 import net.minecraft.block.BlockState;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.FontRenderer;
 import net.minecraft.client.renderer.BufferBuilder;
 import net.minecraft.client.renderer.IRenderTypeBuffer;
 import net.minecraft.client.renderer.LightTexture;
@@ -54,10 +55,14 @@ import net.minecraft.client.renderer.vertex.DefaultVertexFormats;
 import net.minecraft.client.renderer.vertex.VertexBuffer;
 import net.minecraft.client.renderer.vertex.VertexFormat;
 import net.minecraft.inventory.container.PlayerContainer;
+import net.minecraft.util.IReorderingProcessor;
 import net.minecraft.util.ResourceLocation;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.MathHelper;
 import net.minecraft.util.math.vector.Matrix4f;
+import net.minecraft.util.text.ITextProperties;
+import net.minecraft.util.text.LanguageMap;
+import net.minecraft.util.text.Style;
 import net.minecraft.world.LightType;
 import net.minecraftforge.fml.client.registry.RenderingRegistry;
 import net.minecraftforge.fml.event.lifecycle.FMLClientSetupEvent;
@@ -106,19 +111,42 @@ public class InterfaceRender implements IInterfaceRender {
     }
 
     @Override
-    public String getDefaultFontTextureFolder() {
-        return "/assets/minecraft/textures/font";
+    public float getStringWidth(String text, String fontName) {
+        return Minecraft.getInstance().font.width(getTextSequence(text, fontName));
     }
 
     @Override
-    public InputStream getTextureStream(String name) {
-        try {
-            String domain = name.substring("/assets/".length(), name.indexOf("/", "/assets/".length()));
-            String location = name.substring("/assets/".length() + domain.length() + 1);
-            return Minecraft.getInstance().getResourceManager().getResource(new ResourceLocation(domain, location)).getInputStream();
-        } catch (Exception e) {
-            return null;
+    public void renderText(String text, String fontName, TransformationMatrix transform, int color, boolean renderLit, int worldLightValue, boolean renderShadow) {
+        FontRenderer fontRenderer = Minecraft.getInstance().font;
+        IReorderingProcessor textSequence = getTextSequence(text, fontName);
+        int packedLight = renderLit ? LightTexture.pack(15, 15) : worldLightValue;
+
+        matrixStack.pushPose();
+        Matrix4f matrix4f = convertMatrix4f(transform);
+        MatrixStack.Entry stackEntry = matrixStack.last();
+        stackEntry.pose().multiply(matrix4f);
+        fontRenderer.drawInBatch(textSequence, 0.0F, 0.0F, color, renderShadow, stackEntry.pose(), renderBuffer, false, 0, packedLight);
+        matrixStack.popPose();
+    }
+
+    /**
+     * Produces the styled, visually ordered sequence used by both font measurement and rendering.  LanguageMap's
+     * visual ordering passes the raw segment through TextProcessing, which applies legacy formatting codes while
+     * retaining the selected native font in the base style (including across reset codes).
+     */
+    private static IReorderingProcessor getTextSequence(String text, String fontName) {
+        Style fontStyle = Style.EMPTY;
+        if (fontName != null && !fontName.isEmpty()) {
+            ResourceLocation fontLocation = ResourceLocation.tryParse(fontName);
+            if (fontLocation != null) {
+                ResourceLocation fontDefinitionLocation = new ResourceLocation(fontLocation.getNamespace(), "font/" + fontLocation.getPath() + ".json");
+                if (Minecraft.getInstance().getResourceManager().hasResource(fontDefinitionLocation)) {
+                    fontStyle = fontStyle.withFont(fontLocation);
+                }
+            }
         }
+        ITextProperties textProperties = ITextProperties.of(text, fontStyle);
+        return LanguageMap.getInstance().getVisualOrder(textProperties);
     }
 
     @Override

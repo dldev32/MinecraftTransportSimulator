@@ -64,7 +64,7 @@ public class GUIBooklet extends AGUIBase {
         //Contents text labels and buttons.
         if (!booklet.definition.booklet.disableTOC) {
             //TOC page label.
-            GUIComponentLabel contentsLabel = new GUIComponentLabel(guiLeft + booklet.definition.booklet.textureWidth / 4 - 20, guiTop + 25, ColorRGB.BLACK, "CONTENTS");
+            GUIComponentLabel contentsLabel = new GUIComponentLabel(guiLeft + booklet.definition.booklet.textureWidth / 4 - 20, guiTop + 25, ColorRGB.WHITE, "CONTENTS");
             addComponent(contentsLabel);
             List<GUIComponentLabel> contentsLabels = new ArrayList<>();
             contentsLabels.add(contentsLabel);

@@ -190,7 +190,7 @@ public class GUIComponentTextBox extends GUIComponentCutout {
                 RenderText.drawText(text, null, textPosition, fontColor, TextAlignment.LEFT_ALIGNED, 1.0F, false, width, renderTextLit || ignoreGUILightingState, worldLightValue);
             }
         } else {
-            RenderText.drawText(text, null, textPosition, ColorRGB.GRAY, TextAlignment.LEFT_ALIGNED, 1.0F, false, width, renderTextLit || ignoreGUILightingState, worldLightValue);
+            RenderText.drawText(text, null, textPosition, ColorRGB.WHITE, TextAlignment.LEFT_ALIGNED, 1.0F, false, width, renderTextLit || ignoreGUILightingState, worldLightValue);
         }
     }
 

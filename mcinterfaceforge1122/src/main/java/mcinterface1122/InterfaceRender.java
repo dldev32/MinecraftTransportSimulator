@@ -1,5 +1,8 @@
 package mcinterface1122;
 
+import com.ibm.icu.text.ArabicShaping;
+import com.ibm.icu.text.ArabicShapingException;
+import com.ibm.icu.text.Bidi;
 import java.awt.image.BufferedImage;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
@@ -11,6 +14,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
@@ -30,9 +34,13 @@ import minecrafttransportsimulator.rendering.RenderableVertices;
 import minecrafttransportsimulator.systems.ConfigSystem;
 import net.minecraft.block.state.IBlockState;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.FontRenderer;
 import net.minecraft.client.renderer.GlStateManager;
 import net.minecraft.client.renderer.OpenGlHelper;
 import net.minecraft.client.renderer.RenderHelper;
+import net.minecraft.client.resources.IReloadableResourceManager;
+import net.minecraft.client.resources.IResource;
+import net.minecraft.client.resources.IResourceManager;
 import net.minecraft.client.renderer.texture.TextureAtlasSprite;
 import net.minecraft.client.renderer.texture.TextureMap;
 import net.minecraft.client.renderer.texture.TextureUtil;
@@ -54,6 +62,7 @@ public class InterfaceRender implements IInterfaceRender {
     private static final DoubleBuffer buffer = ByteBuffer.allocateDirect(16 * Double.BYTES).order(ByteOrder.nativeOrder()).asDoubleBuffer();
     private static final Map<String, ResourceLocation> internalTextures = new HashMap<>();
     private static final Map<String, Integer> onlineTextures = new HashMap<>();
+    private static final Map<String, FontRenderer> customFontRenderers = new HashMap<>();
     private static final Map<String, ParsedGIF> animatedGIFs = new HashMap<>();
     private static final Map<ParsedGIF, Map<GIFImageFrame, Integer>> animatedGIFFrames = new LinkedHashMap<>();
     private static final List<GUIComponentItem> stacksToRender = new ArrayList<>();
@@ -83,18 +92,42 @@ public class InterfaceRender implements IInterfaceRender {
     }
 
     @Override
-    public String getDefaultFontTextureFolder() {
-        return "/assets/minecraft/textures/font";
+    public float getStringWidth(String text, String fontName) {
+        FontRenderer renderer = getFontRenderer(fontName);
+        return getRenderedStringWidth(renderer, getVisualString(renderer, text));
     }
 
     @Override
-    public InputStream getTextureStream(String name) {
+    public void renderText(String text, String fontName, TransformationMatrix transform, int color, boolean renderLit, int worldLightValue, boolean renderShadow) {
+        FontRenderer renderer = getFontRenderer(fontName);
+        boolean bidi = renderer.getBidiFlag();
+        String visualText = getVisualString(renderer, text);
+        if (renderLit) {
+            setLightingState(false);
+        } else {
+            setSystemLightingState(false);
+            OpenGlHelper.setLightmapTextureCoords(OpenGlHelper.lightmapTexUnit, worldLightValue % 65536, worldLightValue / 65536);
+        }
+        GL11.glPushMatrix();
         try {
-            String domain = name.substring("/assets/".length(), name.indexOf("/", "/assets/".length()));
-            String location = name.substring("/assets/".length() + domain.length() + 1);
-            return Minecraft.getMinecraft().getResourceManager().getResource(new ResourceLocation(domain, location)).getInputStream();
-        } catch (Exception e) {
-            return null;
+            applyTransformOpenGL(transform);
+            if (bidi) {
+                renderer.setBidiFlag(false);
+            }
+            try {
+                renderer.drawString(visualText, 0.0F, 0.0F, color, renderShadow);
+            } finally {
+                if (bidi) {
+                    renderer.setBidiFlag(true);
+                }
+            }
+        } finally {
+            GL11.glPopMatrix();
+            if (renderLit) {
+                setLightingState(true);
+            } else {
+                setSystemLightingState(true);
+            }
         }
     }
 
@@ -304,6 +337,207 @@ public class InterfaceRender implements IInterfaceRender {
                 }
             }
             Minecraft.getMinecraft().getTextureManager().bindTexture(internalTextures.get(textureLocation));
+        }
+    }
+
+    /**
+     * Applies the same Arabic shaping and bidi reordering that FontRenderer applies while drawing.  The renderer's
+     * bidi flag is temporarily disabled at the draw call so this already-processed value is not reordered twice.
+     */
+    private static String getVisualString(FontRenderer renderer, String text) {
+        if (text != null && renderer.getBidiFlag()) {
+            try {
+                Bidi bidi = new Bidi(new ArabicShaping(8).shape(text), 127);
+                bidi.setReorderingMode(0);
+                return bidi.writeReordered(2);
+            } catch (ArabicShapingException e) {
+                //Match FontRenderer: if shaping fails, render and measure the original string.
+            }
+        }
+        return text;
+    }
+
+    /**
+     * Measures the visual string using the formatting state transitions used by FontRenderer.renderStringAtPos.
+     * Vanilla 1.12's getStringWidth only clears bold on reset, while drawing also clears it on color and invalid
+     * formatting codes.
+     */
+    private static int getRenderedStringWidth(FontRenderer renderer, String text) {
+        if (text == null) {
+            return 0;
+        }
+
+        int width = 0;
+        boolean bold = false;
+        for (int i = 0; i < text.length(); ++i) {
+            char character = text.charAt(i);
+            if (character == 167 && i + 1 < text.length()) {
+                int formatIndex = "0123456789abcdefklmnor".indexOf(String.valueOf(text.charAt(++i)).toLowerCase(Locale.ROOT).charAt(0));
+                if (formatIndex < 16 || formatIndex == 21) {
+                    bold = false;
+                } else if (formatIndex == 17) {
+                    bold = true;
+                }
+            } else {
+                int characterWidth = renderer.getCharWidth(character);
+                width += characterWidth;
+                if (bold && characterWidth > 0) {
+                    ++width;
+                }
+            }
+        }
+        return width;
+    }
+
+    /**
+     * Gets a native font renderer for the requested legacy MTS font folder.  Custom fonts use Minecraft's
+     * unicode renderer and fall back to the corresponding vanilla unicode page whenever a custom page is absent.
+     */
+    private static FontRenderer getFontRenderer(String fontName) {
+        Minecraft minecraft = Minecraft.getMinecraft();
+        if (fontName == null || fontName.isEmpty()) {
+            return minecraft.fontRenderer;
+        }
+
+        FontRenderer cachedRenderer = customFontRenderers.get(fontName);
+        if (cachedRenderer != null) {
+            cachedRenderer.setBidiFlag(minecraft.fontRenderer.getBidiFlag());
+            return cachedRenderer;
+        }
+
+        try {
+            ResourceLocation fontLocation = new ResourceLocation(fontName);
+            ResourceLocation firstPageLocation = new ResourceLocation(fontLocation.getNamespace(), "textures/fonts/" + fontLocation.getPath() + "/unicode_page_00.png");
+            if (!hasResource(firstPageLocation)) {
+                return minecraft.fontRenderer;
+            }
+
+            LegacyUnicodeFontRenderer renderer = new LegacyUnicodeFontRenderer(firstPageLocation);
+            if (minecraft.getResourceManager() instanceof IReloadableResourceManager) {
+                ((IReloadableResourceManager) minecraft.getResourceManager()).registerReloadListener(renderer);
+            }
+            renderer.setBidiFlag(minecraft.fontRenderer.getBidiFlag());
+            customFontRenderers.put(fontName, renderer);
+            return renderer;
+        } catch (Exception e) {
+            return minecraft.fontRenderer;
+        }
+    }
+
+    private static boolean hasResource(ResourceLocation location) {
+        try (IResource ignored = Minecraft.getMinecraft().getResourceManager().getResource(location)) {
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    private static class LegacyUnicodeFontRenderer extends FontRenderer {
+        private static final String VANILLA_UNICODE_PAGE_PREFIX = "textures/font/unicode_page_";
+        private static final int UNICODE_PAGE_SIZE = 256;
+        private static final int GLYPHS_PER_PAGE = 256;
+        private static final int GLYPH_SIZE = 16;
+        private final Map<ResourceLocation, ResourceLocation> unicodePageOverrides = new HashMap<>();
+        private final boolean[] resolvedUnicodePages = new boolean[256];
+        private final String customUnicodePagePrefix;
+
+        private LegacyUnicodeFontRenderer(ResourceLocation firstPageLocation) {
+            super(Minecraft.getMinecraft().gameSettings, firstPageLocation, Minecraft.getMinecraft().getTextureManager(), true);
+            String firstPagePath = firstPageLocation.getPath();
+            customUnicodePagePrefix = firstPagePath.substring(0, firstPagePath.lastIndexOf('/') + 1) + "unicode_page_";
+        }
+
+        @Override
+        public int getCharWidth(char character) {
+            loadCustomUnicodePage(character / GLYPHS_PER_PAGE);
+            return super.getCharWidth(character);
+        }
+
+        @Override
+        protected float renderUnicodeChar(char character, boolean italic) {
+            loadCustomUnicodePage(character / GLYPHS_PER_PAGE);
+            return super.renderUnicodeChar(character, italic);
+        }
+
+        @Override
+        public void onResourceManagerReload(IResourceManager resourceManager) {
+            try (IResource glyphSizesResource = resourceManager.getResource(new ResourceLocation("font/glyph_sizes.bin")); InputStream glyphSizesStream = glyphSizesResource.getInputStream()) {
+                int offset = 0;
+                while (offset < glyphWidth.length) {
+                    int readCount = glyphSizesStream.read(glyphWidth, offset, glyphWidth.length - offset);
+                    if (readCount <= 0) {
+                        break;
+                    }
+                    offset += readCount;
+                }
+                if (offset != glyphWidth.length) {
+                    throw new IllegalStateException("Incomplete vanilla glyph_sizes.bin");
+                }
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+
+            unicodePageOverrides.clear();
+            for (int page = 0; page < resolvedUnicodePages.length; ++page) {
+                resolvedUnicodePages[page] = false;
+            }
+        }
+
+        private void loadCustomUnicodePage(int page) {
+            if (resolvedUnicodePages[page]) {
+                return;
+            }
+            resolvedUnicodePages[page] = true;
+
+            String pageSuffix = String.format(Locale.ROOT, "%02x.png", page);
+            ResourceLocation customPageLocation = new ResourceLocation(locationFontTexture.getNamespace(), customUnicodePagePrefix + pageSuffix);
+            try (IResource resource = getResource(customPageLocation)) {
+                BufferedImage image = TextureUtil.readBufferedImage(resource.getInputStream());
+                if (image.getWidth() == UNICODE_PAGE_SIZE && image.getHeight() == UNICODE_PAGE_SIZE) {
+                    loadGlyphWidths(image, page);
+                    unicodePageOverrides.put(new ResourceLocation(VANILLA_UNICODE_PAGE_PREFIX + pageSuffix), customPageLocation);
+                }
+            } catch (Exception e) {
+                //No usable custom page: retain both the vanilla glyph widths and vanilla page texture.
+            }
+        }
+
+        private void loadGlyphWidths(BufferedImage image, int page) {
+            int[] pixels = new int[UNICODE_PAGE_SIZE * UNICODE_PAGE_SIZE];
+            image.getRGB(0, 0, UNICODE_PAGE_SIZE, UNICODE_PAGE_SIZE, pixels, 0, UNICODE_PAGE_SIZE);
+            int firstGlyph = page * GLYPHS_PER_PAGE;
+            for (int glyph = 0; glyph < GLYPHS_PER_PAGE; ++glyph) {
+                int glyphX = glyph % 16 * GLYPH_SIZE;
+                int glyphY = glyph / 16 * GLYPH_SIZE;
+                int firstColumn = GLYPH_SIZE;
+                int lastColumn = -1;
+                for (int column = 0; column < GLYPH_SIZE; ++column) {
+                    for (int row = 0; row < GLYPH_SIZE; ++row) {
+                        if ((pixels[(glyphY + row) * UNICODE_PAGE_SIZE + glyphX + column] >>> 24) != 0) {
+                            firstColumn = Math.min(firstColumn, column);
+                            lastColumn = column;
+                            break;
+                        }
+                    }
+                }
+                if (lastColumn >= firstColumn) {
+                    //A zero byte means "missing" to FontRenderer, so the unrepresentable 0..0 bounds use 0..1.
+                    lastColumn = firstColumn == 0 && lastColumn == 0 ? 1 : lastColumn;
+                    glyphWidth[firstGlyph + glyph] = (byte) (firstColumn << 4 | lastColumn);
+                } else {
+                    glyphWidth[firstGlyph + glyph] = 0;
+                }
+            }
+        }
+
+        @Override
+        protected void bindTexture(ResourceLocation location) {
+            if (unicodePageOverrides != null && location.getNamespace().equals("minecraft") && location.getPath().startsWith(VANILLA_UNICODE_PAGE_PREFIX) && location.getPath().endsWith(".png")) {
+                ResourceLocation pageLocation = unicodePageOverrides.get(location);
+                super.bindTexture(pageLocation != null ? pageLocation : location);
+            } else {
+                super.bindTexture(location);
+            }
         }
     }
 

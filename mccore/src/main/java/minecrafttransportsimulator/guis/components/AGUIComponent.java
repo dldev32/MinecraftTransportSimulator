@@ -113,18 +113,19 @@ public abstract class AGUIComponent {
             //Find the max string width.  This is used to define text bounds.
             //We need to know how many lines we wrap to offset our rendering of our text.
             int wrapWidth = gui.screenWidth - mouseX > mouseX ? gui.screenWidth - mouseX - 2 * TOOLTIP_BORDER_PADDING : mouseX - 2 * TOOLTIP_BORDER_PADDING;
-            float longestLineWidth = 0;
-            int linesOfText = 0;
             StringBuilder tooltipCombinedText = new StringBuilder();
+            boolean firstTooltipLine = true;
             for (String tooltipText : tooltipTextLines) {
-                //Un-sure why we have to multiply by 2 here, but for some reason it mostly works?  Probably some math bad somewhere.
-                float lineWidth = RenderText.getStringWidth(tooltipText, null) * 2;
-                linesOfText += Math.ceil(lineWidth / wrapWidth);
-                tooltipCombinedText.append(tooltipText).append("\n");
-                if (lineWidth > longestLineWidth) {
-                    longestLineWidth = lineWidth;
+                if (firstTooltipLine) {
+                    firstTooltipLine = false;
+                } else {
+                    tooltipCombinedText.append("\n");
                 }
+                tooltipCombinedText.append(tooltipText);
             }
+            String tooltipCombinedString = tooltipCombinedText.toString();
+            float longestLineWidth = RenderText.getWrappedWidth(tooltipCombinedString, null, wrapWidth);
+            int linesOfText = RenderText.getLineCount(tooltipCombinedString, null, wrapWidth);
             int actualStringWidth = (int) (longestLineWidth > wrapWidth ? wrapWidth : longestLineWidth);
             int actualStringHeight = (int) Math.ceil(RenderText.getHeight(linesOfText));
 
@@ -178,7 +179,7 @@ public abstract class AGUIComponent {
 
             //Need to move tooltip text by -y to account for inverted coords.
             mutableTooltipPosition.set(xOffset + TOOLTIP_BORDER_PADDING, -(yOffset + TOOLTIP_BORDER_PADDING), textPosition.z + 50);
-            RenderText.drawText(tooltipCombinedText.toString(), null, mutableTooltipPosition, ColorRGB.WHITE, TextAlignment.LEFT_ALIGNED, 1.0F, false, wrapWidth, true, gui.worldLightValue);
+            RenderText.drawText(tooltipCombinedString, null, mutableTooltipPosition, ColorRGB.WHITE, TextAlignment.LEFT_ALIGNED, 1.0F, false, wrapWidth, true, gui.worldLightValue);
         }
     }
 

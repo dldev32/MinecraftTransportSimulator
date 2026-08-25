@@ -7,6 +7,7 @@ import minecrafttransportsimulator.baseclasses.Point3D;
 import minecrafttransportsimulator.baseclasses.RotationMatrix;
 import minecrafttransportsimulator.packloading.JSONParser.JSONDescription;
 import minecrafttransportsimulator.packloading.JSONParser.JSONRequired;
+import minecrafttransportsimulator.rendering.RenderText.TextShadowMode;
 
 public class JSONText {
     @JSONRequired
@@ -38,7 +39,7 @@ public class JSONText {
     @JSONDescription("The format to display the variable in.  This follows the Java String.format() format, with the input being a floating-point number (%f) for normal variables, and a string (%s) for text variables.  This has many different ways of formatting things.  Google will be your friend here, this documentation shall not.")
     public String variableFormat;
 
-    @JSONDescription("An optional folder of a font to use for this field.  If included, this text will be rendered with this font rather than the default font.  Format is [packID:fontname].  Fonts are then named: assets/packID/textures/fonts/unicode_page_xx.png, where xx corresponds with the default font you are replacing.")
+    @JSONDescription("An optional Minecraft font resource to use for this field.  If included, this text will be rendered with this font rather than the default font.  Format is [packID:fontname], referring to assets/packID/font/fontname.json and its native Minecraft font providers.  On Minecraft 1.12, the legacy assets/packID/textures/fonts/fontname/unicode_page_xx.png layout remains supported.")
     public String fontName;
 
     @JSONRequired(alternativeField = "textureNames")
@@ -51,6 +52,9 @@ public class JSONText {
     @JSONRequired(alternativeField = "textureNames")
     @JSONDescription("A hexadecimal color code.  This tells MTS what color this text should be.  May be omitted for guiTextObjects that define textureNames.")
     public ColorRGB color;
+
+    @JSONDescription("Controls Minecraft's native text shadow.  The value auto enables it only when all visible text colors are bright enough for the darkened shadow to remain distinct, always forces it on, and never disables it.  Defaults to auto.")
+    public TextShadowMode shadowMode;
 
     @JSONDescription("If set, then this text will get its color from the definition section's secondColor parameter, if one exists for the specified index.")
     public int inheritedColorIndex;

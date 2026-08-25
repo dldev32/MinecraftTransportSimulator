@@ -3,6 +3,7 @@ package minecrafttransportsimulator.mcinterface;
 import java.io.InputStream;
 
 import minecrafttransportsimulator.baseclasses.Point3D;
+import minecrafttransportsimulator.baseclasses.TransformationMatrix;
 import minecrafttransportsimulator.guis.components.GUIComponentItem;
 import minecrafttransportsimulator.rendering.GIFParser.ParsedGIF;
 import minecrafttransportsimulator.rendering.RenderableData;
@@ -27,15 +28,17 @@ public interface IInterfaceRender {
     float[] getDefaultBlockTexture(String name);
 
     /**
-     * Returns the default font texture base-location folder.  This changes between game versions since new MC versions
-     * don't have the texture files and we pack them in ourselves.
+     * Returns the Minecraft-rendered width of the passed-in text in unscaled font pixels.
+     * The font name is a Minecraft font resource location, or null for the default font.
      */
-    String getDefaultFontTextureFolder();
+    float getStringWidth(String text, String fontName);
 
     /**
-     * Returns a stream of the texture specified.  This can vary depending on what texture packs are loaded!
+     * Renders one line of text with Minecraft's font renderer.  The transform is fully composed by the caller,
+     * including position, rotation, scale, alignment, and Minecraft's positive-Y font coordinate conversion.
+     * The renderShadow flag controls Minecraft's native text shadow for this line.
      */
-    InputStream getTextureStream(String name);
+    void renderText(String text, String fontName, TransformationMatrix transform, int color, boolean renderLit, int worldLightValue, boolean renderShadow);
 
     /**
      * Renders the item model for the passed-in component.  Only

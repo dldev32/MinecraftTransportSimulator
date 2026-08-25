@@ -131,7 +131,7 @@ public class GUITextEditor extends AGUIBase {
             }
 
             //Create the box and label, then add them to a new struct.
-            GUIComponentLabel textLabel = new GUIComponentLabel(guiLeft + 20, guiTop + 30 + populatingPageHeight, ColorRGB.BLACK, textKey);
+            GUIComponentLabel textLabel = new GUIComponentLabel(guiLeft + 20, guiTop + 30 + populatingPageHeight, ColorRGB.WHITE, textKey);
             addComponent(textLabel);
             GUIComponentTextBox textBox = new GUIComponentTextBox(this, guiLeft + 20, textLabel.constructedY + boxOffsetFromLabel, boxWidth, textBoxHeight, entity.text.get(textDef), ColorRGB.WHITE, textDef.maxLength);
             addComponent(textBox);

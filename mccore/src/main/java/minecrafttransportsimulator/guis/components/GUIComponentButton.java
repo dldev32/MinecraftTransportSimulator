@@ -36,10 +36,10 @@ public abstract class GUIComponentButton extends GUIComponentCutout {
     protected RenderableData renderable3L;
 
     /**
-     * A Simple button with a rendered string in grey and center-aligned.
+     * A Simple button with a rendered string in white and center-aligned.
      **/
     public GUIComponentButton(AGUIBase gui, int x, int y, int width, int height, String text) {
-        this(gui, x, y, width, height, text, true, ColorRGB.DARK_GRAY, DEFAULT_BUTTON_SECTION_WIDTH_OFFSET, DEFAULT_BUTTON_SECTION_HEIGHT_OFFSET, DEFAULT_BUTTON_SECTION_WIDTH, DEFAULT_BUTTON_SECTION_HEIGHT);
+        this(gui, x, y, width, height, text, true, ColorRGB.WHITE, DEFAULT_BUTTON_SECTION_WIDTH_OFFSET, DEFAULT_BUTTON_SECTION_HEIGHT_OFFSET, DEFAULT_BUTTON_SECTION_WIDTH, DEFAULT_BUTTON_SECTION_HEIGHT);
     }
 
     /**
@@ -53,14 +53,14 @@ public abstract class GUIComponentButton extends GUIComponentCutout {
      * A button without texture or text.  Useful when you want a button for something that needs to render as another component.
      **/
     public GUIComponentButton(AGUIBase gui, int x, int y, int width, int height) {
-        this(gui, x, y, width, height, "", true, ColorRGB.DARK_GRAY, 0, 0, 0, 0);
+        this(gui, x, y, width, height, "", true, ColorRGB.WHITE, 0, 0, 0, 0);
     }
 
     /**
      * A button made to render with custom button textures.  Does not render font, but does provide additional parameters for the size of the button.
      **/
     public GUIComponentButton(AGUIBase gui, int x, int y, int width, int height, int textureXOffset, int textureYOffset, int textureSectionWidth, int textureSectionHeight) {
-        this(gui, x, y, width, height, "", true, ColorRGB.DARK_GRAY, textureXOffset, textureYOffset, textureSectionWidth, textureSectionHeight);
+        this(gui, x, y, width, height, "", true, ColorRGB.WHITE, textureXOffset, textureYOffset, textureSectionWidth, textureSectionHeight);
     }
 
     /**

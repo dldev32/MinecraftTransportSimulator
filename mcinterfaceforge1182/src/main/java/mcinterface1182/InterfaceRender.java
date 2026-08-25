@@ -43,6 +43,7 @@ import minecrafttransportsimulator.rendering.GIFParser.ParsedGIF;
 import minecrafttransportsimulator.rendering.RenderableData;
 import minecrafttransportsimulator.systems.ConfigSystem;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.Font;
 import net.minecraft.client.renderer.LightTexture;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderStateShard;
@@ -56,7 +57,11 @@ import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.client.renderer.texture.TextureAtlas;
 import net.minecraft.client.renderer.texture.TextureAtlasSprite;
 import net.minecraft.core.BlockPos;
+import net.minecraft.locale.Language;
+import net.minecraft.network.chat.FormattedText;
+import net.minecraft.network.chat.Style;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.util.FormattedCharSequence;
 import net.minecraft.util.Mth;
 import net.minecraft.world.level.LightLayer;
 import net.minecraft.world.level.block.state.BlockState;
@@ -167,19 +172,30 @@ public class InterfaceRender implements IInterfaceRender {
     }
 
     @Override
-    public String getDefaultFontTextureFolder() {
-        return "/assets/minecraft/textures/font";
+    public float getStringWidth(String text, String fontName) {
+        return Minecraft.getInstance().font.width(getVisualText(text, fontName));
     }
 
     @Override
-    public InputStream getTextureStream(String name) {
-        try {
-            String domain = name.substring("/assets/".length(), name.indexOf("/", "/assets/".length()));
-            String location = name.substring("/assets/".length() + domain.length() + 1);
-            return Minecraft.getInstance().getResourceManager().getResource(new ResourceLocation(domain, location)).getInputStream();
-        } catch (Exception e) {
-            return null;
+    public void renderText(String text, String fontName, TransformationMatrix transform, int color, boolean renderLit, int worldLightValue, boolean renderShadow) {
+        Font font = Minecraft.getInstance().font;
+        FormattedCharSequence visualText = getVisualText(text, fontName);
+        matrixStack.pushPose();
+        matrixStack.last().pose().multiply(convertMatrix4f(transform));
+        font.drawInBatch(visualText, 0.0F, 0.0F, color, renderShadow, matrixStack.last().pose(), renderBuffer, false, 0, renderLit ? LightTexture.FULL_BRIGHT : worldLightValue);
+        matrixStack.popPose();
+    }
+
+    private static FormattedCharSequence getVisualText(String text, String fontName) {
+        Style style = Style.EMPTY;
+        if (fontName != null) {
+            ResourceLocation fontLocation = ResourceLocation.tryParse(fontName);
+            ResourceLocation fontDefinition = fontLocation != null ? new ResourceLocation(fontLocation.getNamespace(), "font/" + fontLocation.getPath() + ".json") : null;
+            if (fontDefinition != null && Minecraft.getInstance().getResourceManager().hasResource(fontDefinition)) {
+                style = style.withFont(fontLocation);
+            }
         }
+        return Language.getInstance().getVisualOrder(FormattedText.of(text, style));
     }
 
     @Override
