@@ -63,6 +63,7 @@ public class InterfaceRender implements IInterfaceRender {
     private static final Map<RenderableVertices, Set<RenderableData>> objectMap = new HashMap<>();
     private static final Map<RenderableVertices, Integer> cachedIndexMap = new HashMap<>();
     protected static int lastRenderPassActualPass;
+    static boolean renderingParticles;
 
     @Override
     public float[] getBlockBreakTexture(AWrapperWorld world, Point3D position) {
@@ -105,6 +106,11 @@ public class InterfaceRender implements IInterfaceRender {
 
     @Override
     public void renderVertices(RenderableData data, boolean changedSinceLastRender) {
+        if (renderingParticles) {
+            setBlend(data.isTranslucent || data.enableBrightBlending);
+            GlStateManager.blendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
+            GlStateManager.depthMask(!data.isTranslucent);
+        }
         if (data.lightingMode.disableWorldLighting || data.vertexObject.isLines) {
             setLightingState(false);
         }

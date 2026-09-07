@@ -7,10 +7,12 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
@@ -92,6 +94,8 @@ public class InterfaceRender implements IInterfaceRender {
     public static MultiBufferSource renderBuffer;
     public static Point3D renderCameraOffset = new Point3D();
     private static boolean renderingGUI;
+    static boolean renderingParticles;
+    static final Set<RenderType> translucentParticleRenderTypes = new HashSet<>();
 
     private static ShaderInstance entityLightsShader;
     private static ShaderInstance entityCutoutNoshadowsShader;
@@ -225,9 +229,9 @@ public class InterfaceRender implements IInterfaceRender {
             //Rewind buffer for next read.
             data.vertexObject.vertices.rewind();
         } else {
-            String typeID = data.texture + data.isTranslucent + data.lightingMode + data.enableBrightBlending;
+            String typeID = data.texture + data.isTranslucent + data.lightingMode + data.enableBrightBlending + (renderingParticles ? "_particle" : "");
             final RenderType renderType;
-            if (data.vertexObject.cacheVertices && !renderingGUI && ConfigSystem.client.renderingSettings.renderingMode.value != 2) {
+            if (data.vertexObject.cacheVertices && !renderingGUI && !renderingParticles && ConfigSystem.client.renderingSettings.renderingMode.value != 2) {
             	//Get the render type and data buffer for this entity.
                 renderType = renderTypes.computeIfAbsent(typeID, k -> CustomRenderType.create("mts_entity", DefaultVertexFormat.NEW_ENTITY, VertexFormat.Mode.TRIANGLES, 2097152, true, data.isTranslucent, CustomRenderType.createForObject(data).createCompositeState(false)));
                 BufferData bufferData = buffers.computeIfAbsent(data, k -> new BufferData(renderType, data));
@@ -268,6 +272,9 @@ public class InterfaceRender implements IInterfaceRender {
             } else {
                 stackEntry.normal().mul(matrix3f);
                 renderType = renderTypes.computeIfAbsent(typeID, k -> CustomRenderType.create("mts_entity_" + typeID, DefaultVertexFormat.NEW_ENTITY, VertexFormat.Mode.TRIANGLES, 256, true, data.isTranslucent, CustomRenderType.createForObject(data).createCompositeState(false)));
+                if (renderingParticles && (data.isTranslucent || data.enableBrightBlending)) {
+                    translucentParticleRenderTypes.add(renderType);
+                }
                 VertexConsumer buffer = renderBuffer.getBuffer(renderType);
                 //System.out.println(renderType);
                 while (data.vertexObject.vertices.hasRemaining()) {
@@ -430,8 +437,8 @@ public class InterfaceRender implements IInterfaceRender {
             stateBuilder.setTextureState(data.texture != null ? getTexture(data.texture) : NO_TEXTURE);
             //Always need lightmaps for entities per their vertex format.
             stateBuilder.setLightmapState(LIGHTMAP);
-            //Entities go to the main target.
-            stateBuilder.setOutputState(MAIN_TARGET);
+            //Particles use the native particle target for Fabulous transparency.
+            stateBuilder.setOutputState(renderingParticles ? PARTICLES_TARGET : MAIN_TARGET);
             //All entity shaders require overlays, so we use those here.
             stateBuilder.setOverlayState(OVERLAY);
             //Culling is required for textured surfaces since they have normals and this saves FPS.
@@ -444,6 +451,9 @@ public class InterfaceRender implements IInterfaceRender {
             //stateBuilder.setTexturingState(DEFAULT_TEXTURING);
             //Not sure what this does, but it should be fine as-is?  I think this is for the Z-buffer.
             //stateBuilder.setWriteMaskState(COLOR_DEPTH_WRITE);
+            if (renderingParticles && (data.isTranslucent || data.enableBrightBlending)) {
+                stateBuilder.setWriteMaskState(COLOR_WRITE);
+            }
             //Don't need to poke lines, there's only one state and we don't change lines for non-line renders.
             //stateBuilder.setLineState(DEFAULT_LINE);
 

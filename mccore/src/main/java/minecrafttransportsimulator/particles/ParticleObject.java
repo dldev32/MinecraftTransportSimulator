@@ -1,4 +1,4 @@
-package minecrafttransportsimulator.entities.instances;
+package minecrafttransportsimulator.particles;
 
 import java.nio.FloatBuffer;
 import java.util.ArrayList;
@@ -10,18 +10,24 @@ import java.util.Map;
 import java.util.Random;
 
 import minecrafttransportsimulator.baseclasses.AnimationSwitchbox;
+import minecrafttransportsimulator.baseclasses.BoundingBox;
 import minecrafttransportsimulator.baseclasses.ColorRGB;
 import minecrafttransportsimulator.baseclasses.Point3D;
 import minecrafttransportsimulator.baseclasses.RotationMatrix;
 import minecrafttransportsimulator.baseclasses.TransformationMatrix;
 import minecrafttransportsimulator.blocks.components.ABlockBase.Axis;
 import minecrafttransportsimulator.entities.components.AEntityC_Renderable;
+import minecrafttransportsimulator.entities.instances.APart;
+import minecrafttransportsimulator.entities.instances.EntityBullet;
+import minecrafttransportsimulator.entities.instances.EntityVehicleF_Physics;
+import minecrafttransportsimulator.entities.instances.PartGun;
 import minecrafttransportsimulator.items.instances.ItemBullet;
 import minecrafttransportsimulator.jsondefs.JSONParticle;
 import minecrafttransportsimulator.jsondefs.JSONParticle.JSONSubParticle;
 import minecrafttransportsimulator.jsondefs.JSONParticle.ParticleRenderingOrientation;
 import minecrafttransportsimulator.jsondefs.JSONParticle.ParticleSpawningOrientation;
 import minecrafttransportsimulator.jsondefs.JSONParticle.ParticleType;
+import minecrafttransportsimulator.mcinterface.AWrapperWorld;
 import minecrafttransportsimulator.mcinterface.IWrapperPlayer;
 import minecrafttransportsimulator.mcinterface.InterfaceManager;
 import minecrafttransportsimulator.rendering.AModelParser;
@@ -32,12 +38,12 @@ import minecrafttransportsimulator.sound.SoundInstance;
 import minecrafttransportsimulator.systems.ConfigSystem;
 
 /**
- * Basic particle class.  This mimic's MC's particle logic, except we can manually set
- * movement logic.
+ * Client particle state and pack-defined movement/rendering logic.  The native Minecraft
+ * particle engine owns its lifecycle; particles are never registered as MTS entities.
  *
  * @author don_bruce
  */
-public class EntityParticle extends AEntityC_Renderable {
+public class ParticleObject {
     private static final RenderableVertices STANDARD_PARTICLE_SPRITE = RenderableVertices.createSprite(1, null, null);
     private static final RenderableVertices TRAIL_PARTICLE_SPRITE = createTrailParticleSprite();
     private static final TransformationMatrix helperTransform = new TransformationMatrix();
@@ -48,8 +54,25 @@ public class EntityParticle extends AEntityC_Renderable {
     private static final Map<String, RenderableVertices> parsedParticleModels = new HashMap<>();
     private static final Random particleRandom = new Random();
 
-    //Constant properties.
+    public final AWrapperWorld world;
+    public final Point3D position = new Point3D();
+    public final Point3D prevPosition = new Point3D();
+    public final Point3D motion = new Point3D();
+    public final RotationMatrix orientation = new RotationMatrix();
+    public final RotationMatrix prevOrientation = new RotationMatrix();
+    public final Point3D scale = new Point3D(1, 1, 1);
+    public final Point3D prevScale = new Point3D(1, 1, 1);
+    public long ticksExisted;
+    public boolean isValid = true;
+
+    //Constant properties.  Keep references to the immediate source's transforms for sub-particles.
     private final AEntityC_Renderable entitySpawning;
+    private final Point3D sourcePosition;
+    private final Point3D sourceMotion;
+    private final RotationMatrix sourceOrientation;
+    private final Point3D sourceScale;
+    private final BoundingBox boundingBox;
+    private final AttachmentState attachment;
     private final AnimationSwitchbox spawningSwitchbox;
     private final JSONParticle definition;
     private final int maxAge;
@@ -63,7 +86,7 @@ public class EntityParticle extends AEntityC_Renderable {
     private final RenderableData renderable;
 
     //Runtime variables.
-    private final boolean killBadParticle;
+    private int worldLightValue;
     private boolean touchingBlocks;
     private float timeOfNextTexture;
     private int textureIndex;
@@ -75,15 +98,26 @@ public class EntityParticle extends AEntityC_Renderable {
     private int colorIndex;
     private int colorDelayIndex;
 
-    public EntityParticle(AEntityC_Renderable entitySpawning, JSONParticle definition, Point3D spawningPosition, Point3D spawningAngles, AnimationSwitchbox spawningSwitchbox) {
-        super(entitySpawning.world, spawningPosition, ZERO_FOR_CONSTRUCTOR, spawningAngles != null ? spawningAngles : ZERO_FOR_CONSTRUCTOR);
+    public ParticleObject(AEntityC_Renderable entitySpawning, JSONParticle definition, Point3D spawningPosition, Point3D spawningAngles, AnimationSwitchbox spawningSwitchbox) {
+        this(entitySpawning, null, definition, spawningPosition, spawningAngles, spawningSwitchbox);
+    }
+
+    private ParticleObject(AEntityC_Renderable entitySpawning, ParticleObject particleSpawning, JSONParticle definition, Point3D spawningPosition, Point3D spawningAngles, AnimationSwitchbox spawningSwitchbox) {
         this.entitySpawning = entitySpawning;
+        this.world = entitySpawning.world;
+        this.sourcePosition = particleSpawning != null ? particleSpawning.position : entitySpawning.position;
+        this.sourceMotion = particleSpawning != null ? particleSpawning.motion : entitySpawning.motion;
+        this.sourceOrientation = particleSpawning != null ? particleSpawning.orientation : entitySpawning.orientation;
+        this.sourceScale = particleSpawning != null ? particleSpawning.scale : entitySpawning.scale;
+        this.position.set(spawningPosition);
+        if (spawningAngles != null) {
+            this.orientation.setToAngles(spawningAngles);
+        }
         this.definition = definition;
+        this.attachment = definition.spawningOrientation == ParticleSpawningOrientation.ATTACHED || definition.spawningOrientation == ParticleSpawningOrientation.ATTACHED_Z || definition.spawningOrientation == ParticleSpawningOrientation.WORLD_ATTACHED ? new AttachmentState(particleSpawning) : null;
         this.spawningSwitchbox = spawningSwitchbox;
-        this.maxAge = generateMaxAge();
-        boundingBox.widthRadius = definition.hitboxSize / 2D;
-        boundingBox.heightRadius = boundingBox.widthRadius;
-        boundingBox.depthRadius = boundingBox.widthRadius;
+        this.maxAge = Math.max(1, generateMaxAge());
+        this.boundingBox = definition.ignoreCollision ? null : new BoundingBox(position, definition.hitboxSize / 2D);
 
         RotationMatrix positionOrientation = null;
 
@@ -93,21 +127,21 @@ public class EntityParticle extends AEntityC_Renderable {
             case ENTITY:
             case ATTACHED:
             case ATTACHED_Z: {
-                orientation.set(entitySpawning.orientation);
-                helperTransform.set(entitySpawning.orientation);
-                positionOrientation = entitySpawning.orientation;
+                orientation.set(sourceOrientation);
+                helperTransform.set(sourceOrientation);
+                positionOrientation = sourceOrientation;
                 break;
             }
             case STREAK:
             case TRAIL:
             case WORLD_ATTACHED: {
                 //Orientation isn't changed from spawn, but we do need to know spawning entity orientation for the transform of position.
-                helperTransform.set(entitySpawning.orientation);
-                positionOrientation = entitySpawning.orientation;
+                helperTransform.set(sourceOrientation);
+                positionOrientation = sourceOrientation;
                 break;
             }
             case FACING: {
-                if (entitySpawning instanceof EntityBullet) {
+                if (particleSpawning == null && entitySpawning instanceof EntityBullet) {
                     EntityBullet bullet = (EntityBullet) entitySpawning;
                     if (bullet.sideHit != Axis.NONE) {
                         helperRotation.setToZero().rotateX(-90);
@@ -120,7 +154,7 @@ public class EntityParticle extends AEntityC_Renderable {
                         this.staticColor = null;
                         this.renderable = null;
                         this.model = null;
-                        this.killBadParticle = true;
+                        this.isValid = false;
                         return;
                     }
                 }
@@ -135,7 +169,7 @@ public class EntityParticle extends AEntityC_Renderable {
         //Set position, but only if we aren't a distance particle.
         //Distance particles are set prior to spawning with their actual position since it handles rotation.
         if (definition.distance == 0 && definition.spawningOrientation != ParticleSpawningOrientation.TRAIL) {
-            setPointToSpawn(spawningPosition, positionOrientation, definition.pos, entitySpawning.scale, spawningSwitchbox, position);
+            setPointToSpawn(spawningPosition, positionOrientation, definition.pos, sourceScale, spawningSwitchbox, position);
         } else {
             position.set(spawningPosition);
         }
@@ -159,7 +193,7 @@ public class EntityParticle extends AEntityC_Renderable {
                 this.renderable = null;
                 this.model = null;
                 this.initialVelocity = null;
-                this.killBadParticle = true;
+                this.isValid = false;
                 return;
             }
         }
@@ -186,16 +220,16 @@ public class EntityParticle extends AEntityC_Renderable {
             motion.rotate(helperTransform);
         }
         if (definition.relativeInheritedVelocityFactor != null) {
-            helperPoint.set(entitySpawning.motion);
-            if (entitySpawning instanceof EntityVehicleF_Physics) {
+            helperPoint.set(sourceMotion);
+            if (particleSpawning == null && entitySpawning instanceof EntityVehicleF_Physics) {
                 helperPoint.scale(((EntityVehicleF_Physics) entitySpawning).speedFactor);
-            } else if (entitySpawning instanceof APart) {
+            } else if (particleSpawning == null && entitySpawning instanceof APart) {
                 APart partSpawning = (APart) entitySpawning;
                 if (partSpawning.vehicleOn != null) {
                     helperPoint.scale(partSpawning.vehicleOn.speedFactor);
                 }
             }
-            helperRotation.setToVector(entitySpawning.motion, true);
+            helperRotation.setToVector(sourceMotion, true);
             helperPoint.reOrigin(helperRotation).multiply(definition.relativeInheritedVelocityFactor).rotate(helperRotation);
             motion.add(helperPoint);
         }
@@ -210,6 +244,13 @@ public class EntityParticle extends AEntityC_Renderable {
         } else if (definition.type == ParticleType.BREAK) {
             texture = RenderableData.GLOBAL_TEXTURE_NAME;
         } else if (definition.type == ParticleType.CASING) {
+            if (particleSpawning != null || !(entitySpawning instanceof PartGun)) {
+                this.staticColor = null;
+                this.renderable = null;
+                this.model = null;
+                this.isValid = false;
+                return;
+            }
             PartGun gun = (PartGun) entitySpawning;
             if(!gun.firedBullets.isEmpty()) {
                 ItemBullet bullet = gun.firedBullets.get(0);
@@ -226,7 +267,7 @@ public class EntityParticle extends AEntityC_Renderable {
                 this.staticColor = null;
                 this.renderable = null;
                 this.model = null;
-                this.killBadParticle = true;
+                this.isValid = false;
                 return;
             }
         } else if (definition.type == ParticleType.SMOKE) {
@@ -347,12 +388,13 @@ public class EntityParticle extends AEntityC_Renderable {
         if (definition.isBlended) {
             renderable.setBlending(ConfigSystem.client.renderingSettings.blendedLights.value);
         }
-
-        this.killBadParticle = false;
+        if (attachment != null) {
+            attachment.initialize();
+        }
     }
 
     public void setTrailSegmentLength(double trailLength) {
-        scale.z = entitySpawning.scale.z != 0 ? trailLength / entitySpawning.scale.z : trailLength;
+        scale.z = sourceScale.z != 0 ? trailLength / sourceScale.z : trailLength;
         prevScale.set(scale);
     }
 
@@ -390,33 +432,34 @@ public class EntityParticle extends AEntityC_Renderable {
         }
     }
 
-    @Override
-    public EntityAutoUpdateTime getUpdateTime() {
-        //Sync with our spawning entity in case we depend on their variables.
-        if (entitySpawning instanceof APart) {
-            return ((APart) entitySpawning).masterEntity.getUpdateTime();
-        } else {
-            return entitySpawning.getUpdateTime();
-        }
-    }
-
-    @Override
     public void update() {
-        super.update();
-        //Check age to see if we are on our last tick or if we're a bad particle.
-        if (ticksExisted == maxAge || killBadParticle) {
+        if (!isValid) {
+            return;
+        }
+        prevPosition.set(position);
+        prevOrientation.set(orientation);
+        prevScale.set(scale);
+        ++ticksExisted;
+        if (ticksExisted >= maxAge) {
             remove();
             return;
+        }
+        worldLightValue = InterfaceManager.renderingInterface.getLightingAtPosition(position);
+        if (attachment != null) {
+            attachment.beginTick();
         }
 
         //Set movement.
         if (!definition.stopsOnGround || !touchingBlocks) {
             if(definition.spawningOrientation == ParticleSpawningOrientation.ATTACHED || definition.spawningOrientation == ParticleSpawningOrientation.ATTACHED_Z) {
-                orientation.set(entitySpawning.orientation);
-                setPointToSpawn(entitySpawning.position, orientation, definition.pos, entitySpawning.scale, spawningSwitchbox, position);
+                orientation.set(sourceOrientation);
+                setPointToSpawn(sourcePosition, orientation, definition.pos, sourceScale, spawningSwitchbox, position);
                 setOrientationToSpawn();
             } else if (definition.spawningOrientation == ParticleSpawningOrientation.WORLD_ATTACHED) {
-                setPointToSpawn(entitySpawning.position, entitySpawning.orientation, definition.pos, entitySpawning.scale, spawningSwitchbox, position);
+                setPointToSpawn(sourcePosition, sourceOrientation, definition.pos, sourceScale, spawningSwitchbox, position);
+            }
+            if (attachment != null) {
+                attachment.sampleCurrentAnchor();
             }
             
             if (definition.movementDuration != 0) {
@@ -463,6 +506,7 @@ public class EntityParticle extends AEntityC_Renderable {
                         //Bubbles float up until they break the surface of the water, then they pop.
                         if (!world.isBlockLiquid(position)) {
                             remove();
+                            return;
                         } else {
                             motion.scale(0.85).add(0, 0.002D, 0);
                         }
@@ -510,10 +554,10 @@ public class EntityParticle extends AEntityC_Renderable {
                 touchingBlocks = boundingBox.updateCollisions(world, motion, true);
                 if (touchingBlocks) {
                     motion.subtract(boundingBox.currentCollisionDepth);
-                    if (definition.stopsOnGround && definition.groundSounds != null) {
+                    if (definition.stopsOnGround && definition.groundSounds != null && !definition.groundSounds.isEmpty() && clientPlayer != null) {
                         double distance = position.distanceTo(clientPlayer.getPosition());
                         if (distance < SoundInstance.DEFAULT_MAX_DISTANCE) {
-                            SoundInstance sound = new SoundInstance(this, definition.groundSounds.get(particleRandom.nextInt(definition.groundSounds.size())));
+                            SoundInstance sound = new SoundInstance(entitySpawning, definition.groundSounds.get(particleRandom.nextInt(definition.groundSounds.size())), position.copy().add(motion));
                             sound.volume = (float) (1 - distance / SoundInstance.DEFAULT_MAX_DISTANCE);
                             InterfaceManager.soundInterface.playQuickSound(sound);
                         }
@@ -539,7 +583,7 @@ public class EntityParticle extends AEntityC_Renderable {
             if (++textureIndex == textureList.size()) {
                 textureIndex = 0;
             }
-            renderable.texture = textureList.get(textureIndex);
+            renderable.setTexture(textureList.get(textureIndex));
             if (definition.textureDelays != null) {
                 if (++textureDelayIndex == definition.textureDelays.size()) {
                     textureDelayIndex = 0;
@@ -572,37 +616,44 @@ public class EntityParticle extends AEntityC_Renderable {
         if (definition.subParticles != null) {
             for (JSONSubParticle subDef : definition.subParticles) {
                 if (subDef.particle.spawnEveryTick ? subDef.time >= ticksExisted : subDef.time == ticksExisted) {
-                    world.addEntity(new EntityParticle(this, subDef.particle, position, null, null));
+                    InterfaceManager.clientInterface.spawnParticle(new ParticleObject(entitySpawning, this, subDef.particle, position, null, null));
                 }
             }
         }
     }
 
-    @Override
-    public boolean requiresDeltaUpdates() {
-        return true;
+    public void remove() {
+        isValid = false;
     }
 
-    @Override
-    public boolean shouldSync() {
-        return false;
-    }
+    /**
+     * Renders once from the native particle engine.  The transform starts at the current
+     * particle position relative to the camera; interpolation and local transforms are added here.
+     */
+    public void render(TransformationMatrix transform, float partialTicks) {
+        if (!isValid || ticksExisted == 0) {
+            return;
+        }
+        renderable.transform.set(transform);
+        if (attachment != null && attachment.updateRenderState()) {
+            helperPoint.set(attachment.renderPrevPosition).interpolate(attachment.renderPosition, partialTicks).subtract(position);
+            helperRotation.interploate(attachment.renderPrevOrientation, attachment.renderOrientation, partialTicks);
+        } else {
+            helperPoint.set(prevPosition).interpolate(position, partialTicks).subtract(position);
+            helperRotation.interploate(prevOrientation, orientation, partialTicks);
+        }
+        renderable.transform.applyTranslation(helperPoint);
+        renderable.transform.applyRotation(helperRotation);
+        helperScale.set(prevScale).interpolate(scale, partialTicks);
+        renderable.transform.applyScaling(helperScale);
 
-    @Override
-    public boolean shouldSavePosition() {
-        return false;
-    }
-
-    @Override
-    protected void renderModel(TransformationMatrix transform, boolean blendingEnabled, float partialTicks) {
-        //First set alpha, then check translucent.
-        //We could change it this update cycle.
+        //Update alpha before submitting the particle for this frame.
         if (definition.toTransparency != 0) {
             renderable.setAlpha(interpolate(definition.transparency, definition.toTransparency, (ticksExisted + partialTicks) / maxAge, true, partialTicks));
         } else {
             renderable.setAlpha(definition.transparency != 0 ? definition.transparency : 1.0F);
         }
-        if (definition.fadeInTransparencyTime >= ticksExisted) {
+        if (definition.fadeInTransparencyTime > 0 && definition.fadeInTransparencyTime >= ticksExisted) {
             renderable.setAlpha(renderable.alpha * ticksExisted / definition.fadeInTransparencyTime);
         }
         if (definition.fadeOutTransparencyTime > maxAge - ticksExisted) {
@@ -613,55 +664,48 @@ public class EntityParticle extends AEntityC_Renderable {
             renderable.setAlpha(renderable.alpha * (1 - (definition.daytimeReductionFactor * world.getLightBrightness(position, true))));
         }
 
-        if (renderable.isTranslucent == blendingEnabled) {
-            if (staticColor == null) {
-                float colorDelta = (ticksExisted + partialTicks - timeOfCurrentColor) / (timeOfNextColor - timeOfCurrentColor);
-                helperColor.red = interpolate(startColor.red, endColor.red, colorDelta, true, partialTicks);
-                helperColor.green = interpolate(startColor.green, endColor.green, colorDelta, true, partialTicks);
-                helperColor.blue = interpolate(startColor.blue, endColor.blue, colorDelta, true, partialTicks);
-                renderable.setColor(helperColor);
-            }
-            renderable.transform.set(transform);
-            if (definition.type == ParticleType.FLAME && (definition.scale == null || definition.scale.isZero()) && definition.toScale == 0) {
-                double totalScale = 1.0F - Math.pow((ticksExisted + partialTicks) / maxAge, 2) / 2F;
-                helperScale.set(totalScale, totalScale, totalScale);
-            } else if (definition.toScale != 0) {
-                if (definition.scale != null) {
-                    helperScale.set(definition.scale);
-                } else {
-                    helperScale.set(0, 0, 0);
-                }
-                helperPoint.set(definition.toScale, definition.toScale, definition.toScale);
-                helperScale.interpolate(helperPoint, (ticksExisted + partialTicks) / maxAge);
-            } else if (definition.scale != null && !definition.scale.isZero()) {
+        if (staticColor == null) {
+            float colorDelta = (ticksExisted + partialTicks - timeOfCurrentColor) / (timeOfNextColor - timeOfCurrentColor);
+            helperColor.red = interpolate(startColor.red, endColor.red, colorDelta, true, partialTicks);
+            helperColor.green = interpolate(startColor.green, endColor.green, colorDelta, true, partialTicks);
+            helperColor.blue = interpolate(startColor.blue, endColor.blue, colorDelta, true, partialTicks);
+            renderable.setColor(helperColor);
+        }
+
+        if (definition.type == ParticleType.FLAME && (definition.scale == null || definition.scale.isZero()) && definition.toScale == 0) {
+            double totalScale = 1.0F - Math.pow((ticksExisted + partialTicks) / maxAge, 2) / 2F;
+            helperScale.set(totalScale, totalScale, totalScale);
+        } else if (definition.toScale != 0) {
+            if (definition.scale != null) {
                 helperScale.set(definition.scale);
             } else {
-                helperScale.set(1, 1, 1);
+                helperScale.set(0, 0, 0);
             }
-            if (definition.fadeInScaleTime >= ticksExisted) {
-                helperScale.scale(1 - ((definition.fadeInScaleTime - ticksExisted) / (float) definition.fadeInScaleTime));
-            }
-            if (definition.fadeOutScaleTime > maxAge - ticksExisted) {
-                helperScale.scale((maxAge - ticksExisted) / (float) definition.fadeOutScaleTime);
-            }
-            //TRAIL length is set on the particle scale, while ATTACHED_Z length comes from the definition scale.
-            if (definition.spawningOrientation == ParticleSpawningOrientation.TRAIL) {
-                double trailWidth = helperScale.y != 0 ? helperScale.y : helperScale.x;
-                renderable.transform.applyScaling(trailWidth * entitySpawning.scale.x, helperScale.z * entitySpawning.scale.y, entitySpawning.scale.z);
-            } else if (definition.spawningOrientation == ParticleSpawningOrientation.ATTACHED_Z) {
-                double trailWidth = helperScale.y != 0 ? helperScale.y : helperScale.x;
-                renderable.transform.applyScaling(trailWidth * entitySpawning.scale.x, entitySpawning.scale.y, helperScale.z * entitySpawning.scale.z);
-            } else {
-                renderable.transform.applyScaling(helperScale.x * entitySpawning.scale.x, helperScale.y * entitySpawning.scale.y, helperScale.z * entitySpawning.scale.z);
-            }
-            renderable.setLightValue(worldLightValue);
-            renderable.render();
+            helperPoint.set(definition.toScale, definition.toScale, definition.toScale);
+            helperScale.interpolate(helperPoint, (ticksExisted + partialTicks) / maxAge);
+        } else if (definition.scale != null && !definition.scale.isZero()) {
+            helperScale.set(definition.scale);
+        } else {
+            helperScale.set(1, 1, 1);
         }
-    }
-
-    @Override
-    public boolean disableRendering() {
-        return killBadParticle || super.disableRendering();
+        if (definition.fadeInScaleTime > 0 && definition.fadeInScaleTime >= ticksExisted) {
+            helperScale.scale(1 - ((definition.fadeInScaleTime - ticksExisted) / (float) definition.fadeInScaleTime));
+        }
+        if (definition.fadeOutScaleTime > maxAge - ticksExisted) {
+            helperScale.scale((maxAge - ticksExisted) / (float) definition.fadeOutScaleTime);
+        }
+        //TRAIL length is set on the particle scale, while ATTACHED_Z length comes from the definition scale.
+        if (definition.spawningOrientation == ParticleSpawningOrientation.TRAIL) {
+            double trailWidth = helperScale.y != 0 ? helperScale.y : helperScale.x;
+            renderable.transform.applyScaling(trailWidth * sourceScale.x, helperScale.z * sourceScale.y, sourceScale.z);
+        } else if (definition.spawningOrientation == ParticleSpawningOrientation.ATTACHED_Z) {
+            double trailWidth = helperScale.y != 0 ? helperScale.y : helperScale.x;
+            renderable.transform.applyScaling(trailWidth * sourceScale.x, sourceScale.y, helperScale.z * sourceScale.z);
+        } else {
+            renderable.transform.applyScaling(helperScale.x * sourceScale.x, helperScale.y * sourceScale.y, helperScale.z * sourceScale.z);
+        }
+        renderable.setLightValue(worldLightValue);
+        renderable.render();
     }
 
     private void updateOrientation() {
@@ -691,6 +735,118 @@ public class EntityParticle extends AEntityC_Renderable {
             case MOTION: {
                 orientation.setToVector(motion, true);
                 break;
+            }
+        }
+    }
+
+    /**
+     * Only attached particles need these snapshots.  Minecraft may tick particles before
+     * the source entity (for example a held gun), so rendering follows the source's latest
+     * transforms without advancing particle movement, collisions, or age a second time.
+     */
+    private class AttachmentState {
+        private final ParticleObject particleSource;
+        private final Point3D sourcePrevPosition;
+        private final RotationMatrix sourcePrevOrientation;
+        private final Point3D previousAnchor = new Point3D();
+        private final Point3D currentAnchor = new Point3D();
+        private final Point3D previousLocalAnchor = new Point3D();
+        private final Point3D currentLocalAnchor = new Point3D();
+        private final RotationMatrix previousSourceOrientation = new RotationMatrix();
+        private final RotationMatrix currentSourceOrientation = new RotationMatrix();
+        private final Point3D renderPrevPosition = new Point3D();
+        private final Point3D renderPosition = new Point3D();
+        private final RotationMatrix renderPrevOrientation = new RotationMatrix();
+        private final RotationMatrix renderOrientation = new RotationMatrix();
+        private long sampledSourceTick;
+
+        private AttachmentState(ParticleObject particleSource) {
+            this.particleSource = particleSource;
+            this.sourcePrevPosition = particleSource != null ? particleSource.prevPosition : entitySpawning.prevPosition;
+            this.sourcePrevOrientation = particleSource != null ? particleSource.prevOrientation : entitySpawning.prevOrientation;
+        }
+
+        private long getSourceTick() {
+            return particleSource != null ? particleSource.ticksExisted : entitySpawning.ticksExisted;
+        }
+
+        private void initialize() {
+            setPointToSpawn(sourcePosition, sourceOrientation, definition.pos, sourceScale, spawningSwitchbox, currentAnchor);
+            currentLocalAnchor.set(currentAnchor).subtract(sourcePosition).reOrigin(sourceOrientation);
+            currentSourceOrientation.set(sourceOrientation);
+            sampledSourceTick = getSourceTick();
+            beginTick();
+        }
+
+        private void beginTick() {
+            previousAnchor.set(currentAnchor);
+            previousLocalAnchor.set(currentLocalAnchor);
+            previousSourceOrientation.set(currentSourceOrientation);
+        }
+
+        private void sampleCurrentAnchor() {
+            currentAnchor.set(position);
+            currentLocalAnchor.set(currentAnchor).subtract(sourcePosition).reOrigin(sourceOrientation);
+            currentSourceOrientation.set(sourceOrientation);
+            sampledSourceTick = getSourceTick();
+        }
+
+        private boolean updateRenderState() {
+            if (definition.stopsOnGround && touchingBlocks) {
+                return false;
+            }
+            AttachmentState parentAttachment = particleSource != null ? particleSource.attachment : null;
+            boolean parentCorrected = parentAttachment != null && parentAttachment.updateRenderState();
+            boolean sourceAdvanced = getSourceTick() != sampledSourceTick;
+            if (!sourceAdvanced && !parentCorrected) {
+                return false;
+            }
+
+            Point3D previousSourcePosition = parentCorrected ? parentAttachment.renderPrevPosition : sourcePrevPosition;
+            Point3D currentSourcePosition = parentCorrected ? parentAttachment.renderPosition : sourcePosition;
+            RotationMatrix previousSourceRotation = parentCorrected ? parentAttachment.renderPrevOrientation : sourcePrevOrientation;
+            RotationMatrix currentSourceRotation = parentCorrected ? parentAttachment.renderOrientation : sourceOrientation;
+
+            //The sampled current animation offset belongs to the source's previous tick
+            //when that source has advanced since the native particle update.
+            renderPrevPosition.set(sourceAdvanced ? currentLocalAnchor : previousLocalAnchor).rotate(previousSourceRotation).add(previousSourcePosition);
+            if (sourceAdvanced) {
+                setPointToSpawn(currentSourcePosition, currentSourceRotation, definition.pos, sourceScale, spawningSwitchbox, renderPosition);
+            } else {
+                renderPosition.set(currentLocalAnchor).rotate(currentSourceRotation).add(currentSourcePosition);
+            }
+            //Keep the particle's own motion relative to each sampled attachment anchor.
+            renderPrevPosition.add(prevPosition).subtract(previousAnchor);
+            renderPosition.add(position).subtract(currentAnchor);
+            setRenderOrientation(renderPrevOrientation, prevOrientation, previousSourceOrientation, previousSourceRotation, renderPrevPosition, ticksExisted > 1);
+            setRenderOrientation(renderOrientation, orientation, currentSourceOrientation, currentSourceRotation, renderPosition, true);
+            return true;
+        }
+
+        private void setRenderOrientation(RotationMatrix result, RotationMatrix particleRotation, RotationMatrix sampledSourceRotation, RotationMatrix renderedSourceRotation, Point3D renderedPosition, boolean applyRotationVelocity) {
+            if (definition.spawningOrientation != ParticleSpawningOrientation.WORLD_ATTACHED && (definition.renderingOrientation == ParticleRenderingOrientation.FIXED || definition.renderingOrientation == ParticleRenderingOrientation.ZAXIS)) {
+                result.set(renderedSourceRotation).multiplyTranspose(sampledSourceRotation).multiply(particleRotation);
+            } else {
+                result.set(particleRotation);
+            }
+            if (definition.renderingOrientation == ParticleRenderingOrientation.PLAYER || definition.renderingOrientation == ParticleRenderingOrientation.YAXIS) {
+                helperPoint.set(InterfaceManager.clientInterface.getCameraPosition()).subtract(renderedPosition);
+                if (definition.renderingOrientation == ParticleRenderingOrientation.YAXIS) {
+                    helperPoint.y = 0;
+                }
+                result.setToVector(helperPoint, true);
+                if (applyRotationVelocity && definition.rotationVelocity != null) {
+                    helperRotation.setToAngles(definition.rotationVelocity);
+                    result.multiply(helperRotation);
+                }
+            } else if (definition.renderingOrientation == ParticleRenderingOrientation.ZAXIS) {
+                helperPoint.set(InterfaceManager.clientInterface.getCameraPosition()).subtract(renderedPosition).reOrigin(result);
+                if (helperPoint.x != 0 || helperPoint.y != 0) {
+                    result.rotateZ(Math.toDegrees(Math.atan2(-helperPoint.x, helperPoint.y)));
+                    if (applyRotationVelocity && definition.rotationVelocity != null) {
+                        result.rotateZ(definition.rotationVelocity.z);
+                    }
+                }
             }
         }
     }

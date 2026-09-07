@@ -14,6 +14,7 @@ import minecrafttransportsimulator.mcinterface.IWrapperItemStack;
 import minecrafttransportsimulator.mcinterface.IWrapperPlayer;
 import minecrafttransportsimulator.mcinterface.InterfaceManager;
 import minecrafttransportsimulator.packloading.PackParser;
+import minecrafttransportsimulator.particles.ParticleObject;
 import minecrafttransportsimulator.systems.CameraSystem.CameraMode;
 import minecrafttransportsimulator.systems.ConfigSystem;
 import minecrafttransportsimulator.systems.ControlSystem;
@@ -44,6 +45,16 @@ public class InterfaceClient implements IInterfaceClient {
     private static int ticksToCullingWarning = 200;
     private static BuilderEntityRenderForwarder activeFollower;
     private static int ticksSincePlayerJoin;
+
+    @Override
+    public void spawnParticle(ParticleObject particle) {
+        Minecraft mc = Minecraft.getMinecraft();
+        if (particle.isValid && mc.world != null && ((WrapperWorld) particle.world).world == mc.world) {
+            mc.effectRenderer.addEffect(new BuilderParticle(particle));
+        } else {
+            particle.remove();
+        }
+    }
 
     @Override
     public boolean isGamePaused() {

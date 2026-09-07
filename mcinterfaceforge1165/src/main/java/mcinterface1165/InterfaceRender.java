@@ -6,10 +6,12 @@ import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Set;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
 import javax.imageio.ImageIO;
@@ -82,11 +84,13 @@ public class InterfaceRender implements IInterfaceRender {
 
     private static RenderState.TextureState MISSING_STATE;
     private static RenderState.TextureState BLOCK_STATE;
-    private static MatrixStack matrixStack;
+    static MatrixStack matrixStack;
     public static Matrix4f projectionMatrix;
-    private static IRenderTypeBuffer renderBuffer;
+    static IRenderTypeBuffer renderBuffer;
     public static Point3D renderCameraOffset = new Point3D();
     private static boolean renderingGUI;
+    static boolean renderingParticles;
+    static final Set<RenderType> translucentParticleRenderTypes = new HashSet<>();
     private static float[] matrixConvertArray = new float[16];
 
     @Override
@@ -143,9 +147,9 @@ public class InterfaceRender implements IInterfaceRender {
             //Rewind buffer for next read.
             data.vertexObject.vertices.rewind();
         } else {
-            String typeID = data.texture + data.isTranslucent + data.lightingMode + data.enableBrightBlending;
+            String typeID = data.texture + data.isTranslucent + data.lightingMode + data.enableBrightBlending + renderingParticles;
             final RenderType renderType;
-            if (data.vertexObject.cacheVertices && !renderingGUI && ConfigSystem.client.renderingSettings.renderingMode.value != 2) {
+            if (data.vertexObject.cacheVertices && !renderingGUI && !renderingParticles && ConfigSystem.client.renderingSettings.renderingMode.value != 2) {
             	//Get the render type and data buffer for this entity.
                 renderType = renderTypes.computeIfAbsent(typeID, k -> CustomRenderType.create("mts_entity", DefaultVertexFormats.NEW_ENTITY, 7, 2097152, true, data.isTranslucent, CustomRenderType.createForObject(data).createCompositeState(false)));
                 BufferData buffer = buffers.computeIfAbsent(data, k -> new BufferData(renderType, data));
@@ -192,6 +196,9 @@ public class InterfaceRender implements IInterfaceRender {
                 renders.add(new RenderData(stackEntry.pose(), buffer.buffer));
             } else {
                 renderType = renderTypes.computeIfAbsent(typeID, k -> CustomRenderType.create("mts_entity", DefaultVertexFormats.NEW_ENTITY, 7, 256, true, data.isTranslucent, CustomRenderType.createForObject(data).createCompositeState(false)));
+                if (renderingParticles && (data.isTranslucent || data.enableBrightBlending)) {
+                    translucentParticleRenderTypes.add(renderType);
+                }
                 IVertexBuilder buffer = renderBuffer.getBuffer(renderType);
                 
                 //Now populate the state we requested.
@@ -575,8 +582,12 @@ public class InterfaceRender implements IInterfaceRender {
             //stateBuilder.setFogState(NO_FOG);
             //No layering.
             //stateBuilder.setLayeringState(NO_LAYERING);
-            //Target is always main.
-            //stateBuilder.setOutputState(MAIN_TARGET);
+            if (renderingParticles) {
+                stateBuilder.setOutputState(PARTICLES_TARGET);
+                if (data.isTranslucent || data.enableBrightBlending) {
+                    stateBuilder.setWriteMaskState(COLOR_WRITE);
+                }
+            }
             //Default texture is fine.
             //stateBuilder.setTexturingState(DEFAULT_TEXTURING);
             //Not sure what this does, but it should be fine as-is?
