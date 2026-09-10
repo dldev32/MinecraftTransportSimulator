@@ -52,6 +52,9 @@ import net.minecraftforge.fml.common.registry.GameRegistry;
  * It also assumes the block can be rotated, and saves the rotation as a set of
  * FACING properties.  This MAY change in later versions to TE data though...
  *
+ * Minecraft marks its BlockState implementation hooks deprecated for callers, but overrides
+ * and their super calls are required here; calling through the state would recurse.
+ *
  * @author don_bruce
  */
 @EventBusSubscriber

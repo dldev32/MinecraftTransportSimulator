@@ -798,7 +798,6 @@ public class WrapperWorld extends AWrapperWorld {
         }
     }
 
-    @SuppressWarnings("deprecation")
     @Override
     public boolean placeBlock(Point3D position, IWrapperItemStack stack) {
         BlockPos pos = new BlockPos(position.x, position.y, position.z);
@@ -806,6 +805,8 @@ public class WrapperWorld extends AWrapperWorld {
             ItemStack mcStack = ((WrapperItemStack) stack).stack;
             Block block = Block.getBlockFromItem(mcStack.getItem());
             if (block != Blocks.AIR) {
+                //1.12.2 stores block variants as metadata and has no replacement for this conversion.
+                @SuppressWarnings("deprecation")
                 IBlockState newState = block.getStateFromMeta(mcStack.getMetadata());
                 if (world.setBlockState(pos, newState, 11)) {
                     return true;

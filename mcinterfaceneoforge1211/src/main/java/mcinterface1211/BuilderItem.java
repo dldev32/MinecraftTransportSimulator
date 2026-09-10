@@ -165,7 +165,7 @@ public class BuilderItem extends Item implements IBuilderItemInterface {
     }
 
     @Override
-    public ItemAttributeModifiers getDefaultAttributeModifiers() {
+    public ItemAttributeModifiers getDefaultAttributeModifiers(ItemStack stack) {
         return this.defaultModifiers;
     }
 

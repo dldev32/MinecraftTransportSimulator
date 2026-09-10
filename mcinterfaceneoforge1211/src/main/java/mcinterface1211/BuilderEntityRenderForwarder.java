@@ -9,6 +9,7 @@ import net.minecraft.world.level.block.Portal;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.material.PushReaction;
 import net.minecraft.world.phys.Vec3;
+import net.neoforged.neoforge.fluids.FluidType;
 import net.neoforged.neoforge.registries.DeferredHolder;
 
 /**
@@ -86,7 +87,7 @@ public class BuilderEntityRenderForwarder extends ABuilderEntityBase {
     }
 
     @Override
-    public boolean isPushedByFluid() {
+    public boolean isPushedByFluid(FluidType type) {
         return false;
     }
 

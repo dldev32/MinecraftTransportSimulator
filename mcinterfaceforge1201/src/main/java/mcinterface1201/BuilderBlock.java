@@ -8,6 +8,7 @@ import minecrafttransportsimulator.blocks.components.ABlockBase;
 import minecrafttransportsimulator.blocks.instances.BlockBlock;
 import minecrafttransportsimulator.blocks.instances.BlockCollision;
 import net.minecraft.core.BlockPos;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.Level;
@@ -15,6 +16,7 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockBehaviour;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.material.MapColor;
+import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraft.world.phys.shapes.VoxelShape;
@@ -26,6 +28,8 @@ import net.minecraftforge.registries.ForgeRegistries;
  * block (so no culling) and may have alpha channels in the texture (like glass).
  * It also assumes the block can be rotated, and saves the rotation as a set of
  * FACING properties.  This MAY change in later versions to TE data though...
+ *
+ * Vanilla marks block callbacks deprecated for callers, but they remain the required override points.
  *
  * @author don_bruce
  */
@@ -60,13 +64,12 @@ public class BuilderBlock extends Block {
         super.onRemove(state, world, pos, newState, isMoving);
     }
 
-    @SuppressWarnings("deprecation")
     @Override
-    public ItemStack getCloneItemStack(BlockGetter world, BlockPos pos, BlockState state) {
+    public ItemStack getCloneItemStack(BlockState state, HitResult target, BlockGetter world, BlockPos pos, Player player) {
         if (block instanceof BlockBlock) {
             return new ItemStack(BuilderItem.itemMap.get(((BlockBlock) block).itemReference));
         } else {
-            return super.getCloneItemStack(world, pos, state);
+            return super.getCloneItemStack(state, target, world, pos, player);
         }
     }
 

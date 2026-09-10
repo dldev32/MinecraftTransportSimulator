@@ -22,6 +22,8 @@ import minecrafttransportsimulator.packloading.PackMaterialComponent;
 import minecrafttransportsimulator.packloading.PackParser;
 import net.minecraft.item.ItemStack;
 import net.minecraft.util.ResourceLocation;
+import net.minecraft.util.text.ITextComponent;
+import net.minecraft.util.text.StringTextComponent;
 
 /**
  * Interface for the JEI system.  This is responsible for populating JEI with the various items,
@@ -116,10 +118,16 @@ public class InterfaceJEI implements IModPlugin {
             return new ResourceLocation(InterfaceManager.coreModID, benchItem.getRegistrationName());
         }
 
+        //JEI 7 still requires this legacy method alongside the text component API.
         @SuppressWarnings("deprecation")
         @Override
         public String getTitle() {
-            return benchItem.getItemName();
+            return getTitleAsTextComponent().getString();
+        }
+
+        @Override
+        public ITextComponent getTitleAsTextComponent() {
+            return new StringTextComponent(benchItem.getItemName());
         }
 
         @Override

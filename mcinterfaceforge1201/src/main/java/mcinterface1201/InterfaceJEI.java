@@ -8,6 +8,7 @@ import mezz.jei.api.JeiPlugin;
 import mezz.jei.api.constants.VanillaTypes;
 import mezz.jei.api.gui.builder.IRecipeLayoutBuilder;
 import mezz.jei.api.gui.drawable.IDrawable;
+import mezz.jei.api.gui.ingredient.IRecipeSlotsView;
 import mezz.jei.api.helpers.IGuiHelper;
 import mezz.jei.api.recipe.IFocusGroup;
 import mezz.jei.api.recipe.RecipeIngredientRole;
@@ -20,6 +21,7 @@ import minecrafttransportsimulator.items.instances.ItemDecor;
 import minecrafttransportsimulator.mcinterface.IWrapperItemStack;
 import minecrafttransportsimulator.packloading.PackMaterialComponent;
 import minecrafttransportsimulator.packloading.PackParser;
+import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
@@ -118,8 +120,18 @@ public class InterfaceJEI implements IModPlugin {
         }
 
         @Override
-        public IDrawable getBackground() {
-            return background;
+        public int getWidth() {
+            return background.getWidth();
+        }
+
+        @Override
+        public int getHeight() {
+            return background.getHeight();
+        }
+
+        @Override
+        public void draw(PackRecipeWrapper recipe, IRecipeSlotsView recipeSlotsView, GuiGraphics guiGraphics, double mouseX, double mouseY) {
+            background.draw(guiGraphics);
         }
 
         @Override

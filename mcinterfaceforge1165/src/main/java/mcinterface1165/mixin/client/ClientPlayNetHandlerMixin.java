@@ -16,7 +16,6 @@ import net.minecraft.client.world.ClientWorld;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.EntityType;
 import net.minecraft.network.play.server.SSpawnObjectPacket;
-import net.minecraft.util.registry.Registry;
 
 @Mixin(ClientPlayNetHandler.class)
 public abstract class ClientPlayNetHandlerMixin {
@@ -29,13 +28,11 @@ public abstract class ClientPlayNetHandlerMixin {
      * Need this to spawn our entity on the client.  MC doesn't handle new entities, and Forge didn't make any hooks.
      * The only way we could do this is by extending LivingEntity, but that's a lotta overhead we don't want.
      */
-    @SuppressWarnings("deprecation")
     @Inject(method = "handleAddEntity", at = @At(value = "TAIL"))
     public void inject_handleAddEntity(SSpawnObjectPacket packet, CallbackInfo ci) {
-        int typeID = Registry.ENTITY_TYPE.getId(packet.getType());
-        EntityType<?> type = Registry.ENTITY_TYPE.byId(typeID);
+        EntityType<?> type = packet.getType();
         if (type == BuilderEntityExisting.E_TYPE2.get() || type == BuilderEntityLinkedSeat.E_TYPE3.get() || type == BuilderEntityRenderForwarder.E_TYPE4.get()) {
-            Entity entity = EntityType.create(typeID, minecraft.level);
+            Entity entity = type.create(minecraft.level);
             if (entity != null) {
                 int i = packet.getId();
                 double d0 = packet.getX();

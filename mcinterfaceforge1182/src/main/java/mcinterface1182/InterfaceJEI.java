@@ -11,6 +11,7 @@ import mezz.jei.api.gui.drawable.IDrawable;
 import mezz.jei.api.helpers.IGuiHelper;
 import mezz.jei.api.recipe.IFocusGroup;
 import mezz.jei.api.recipe.RecipeIngredientRole;
+import mezz.jei.api.recipe.RecipeType;
 import mezz.jei.api.recipe.category.IRecipeCategory;
 import mezz.jei.api.registration.IRecipeCategoryRegistration;
 import mezz.jei.api.registration.IRecipeRegistration;
@@ -98,24 +99,32 @@ public class InterfaceJEI implements IModPlugin {
     private static class BenchRecipeCategory implements IRecipeCategory<PackRecipeWrapper> {
         private final ItemDecor benchItem;
         private final List<PackRecipeWrapper> benchRecipes;
+        private final RecipeType<PackRecipeWrapper> recipeType;
         private final IDrawable background;
         private final IDrawable icon;
 
         private BenchRecipeCategory(ItemDecor benchItem, List<PackRecipeWrapper> benchRecipes, IGuiHelper guiHelper) {
             this.benchItem = benchItem;
             this.benchRecipes = benchRecipes;
+            this.recipeType = RecipeType.create(InterfaceManager.coreModID, benchItem.getRegistrationName(), PackRecipeWrapper.class);
             this.background = guiHelper.createDrawable(new ResourceLocation(InterfaceManager.coreModID, "textures/guis/jei_crafting.png"), 0, 0, 134, 97);
             this.icon = guiHelper.createDrawableIngredient(VanillaTypes.ITEM_STACK, ((WrapperItemStack) benchItem.getNewStack(null)).stack);
         }
 
         @Override
-        public Class<PackRecipeWrapper> getRecipeClass() {
-            return PackRecipeWrapper.class;
+        public RecipeType<PackRecipeWrapper> getRecipeType() {
+            return recipeType;
+        }
+
+        //JEI 9 still requires these abstract methods despite deprecating them in favor of getRecipeType.
+        @Override
+        public Class<? extends PackRecipeWrapper> getRecipeClass() {
+            return recipeType.getRecipeClass();
         }
 
         @Override
         public ResourceLocation getUid() {
-            return new ResourceLocation(InterfaceManager.coreModID, benchItem.getRegistrationName());
+            return recipeType.getUid();
         }
 
         @Override

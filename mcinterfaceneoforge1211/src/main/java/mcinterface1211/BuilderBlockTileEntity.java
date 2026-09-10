@@ -38,6 +38,7 @@ import net.minecraft.world.level.material.MapColor;
 import net.minecraft.world.level.storage.loot.LootParams;
 import net.minecraft.world.level.storage.loot.parameters.LootContextParams;
 import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraft.world.phys.shapes.VoxelShape;
@@ -114,7 +115,6 @@ public class BuilderBlockTileEntity extends BuilderBlock implements EntityBlock 
     }
 
 
-    @SuppressWarnings("deprecation")
     @Override
     public InteractionResult useWithoutItem(BlockState state, Level world, BlockPos pos, Player player, BlockHitResult hit) {
         //Forward this click to the block.  For left-clicks we'll need to use item attack calls.
@@ -132,7 +132,6 @@ public class BuilderBlockTileEntity extends BuilderBlock implements EntityBlock 
     }
 
     @Override
-    @SuppressWarnings("deprecation")
     public BlockState updateShape(BlockState state, Direction facing, BlockState facingState, LevelAccessor world, BlockPos pos, BlockPos facingPos) {
         //Forward the change of state of a neighbor to the tile if we have one.
         if (!world.isClientSide()) {
@@ -146,9 +145,8 @@ public class BuilderBlockTileEntity extends BuilderBlock implements EntityBlock 
         return super.updateShape(state, facing, facingState, world, pos, facingPos);
     }
 
-    @SuppressWarnings("deprecation")
     @Override
-    public ItemStack getCloneItemStack(LevelReader world, BlockPos pos, BlockState state) {
+    public ItemStack getCloneItemStack(BlockState state, HitResult target, LevelReader world, BlockPos pos, Player player) {
         //Returns the ItemStack that gets put in the player's inventory when they middle-click this block.
         //This calls down into getItem, which then uses the Item class's block<->item mapping to get a block.
         //By overriding here, we intercept those calls and return our own.  This also allows us to put NBT
@@ -166,10 +164,9 @@ public class BuilderBlockTileEntity extends BuilderBlock implements EntityBlock 
                 }
             }
         }
-        return super.getCloneItemStack(world, pos, state);
+        return super.getCloneItemStack(state, target, world, pos, player);
     }
 
-    @SuppressWarnings("deprecation")
     @Override
     public List<ItemStack> getDrops(BlockState state, LootParams.Builder builder) {
         //If this is a TE, drop TE drops.  Otherwise, drop normal drops.

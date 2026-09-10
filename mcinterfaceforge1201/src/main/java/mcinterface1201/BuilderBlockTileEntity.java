@@ -37,12 +37,15 @@ import net.minecraft.world.level.material.MapColor;
 import net.minecraft.world.level.storage.loot.LootParams;
 import net.minecraft.world.level.storage.loot.parameters.LootContextParams;
 import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraft.world.phys.shapes.VoxelShape;
 
 /**
  * Builder for an advanced  MC Block class that has a Tile Entity associated with it.
+ *
+ * Vanilla marks block callbacks deprecated for callers, but they remain the required override points.
  *
  * @author don_bruce
  */
@@ -145,9 +148,8 @@ public class BuilderBlockTileEntity extends BuilderBlock implements EntityBlock 
         return super.updateShape(state, facing, facingState, world, pos, facingPos);
     }
 
-    @SuppressWarnings("deprecation")
     @Override
-    public ItemStack getCloneItemStack(BlockGetter world, BlockPos pos, BlockState state) {
+    public ItemStack getCloneItemStack(BlockState state, HitResult target, BlockGetter world, BlockPos pos, Player player) {
         //Returns the ItemStack that gets put in the player's inventory when they middle-click this block.
         //This calls down into getItem, which then uses the Item class's block<->item mapping to get a block.
         //By overriding here, we intercept those calls and return our own.  This also allows us to put NBT
@@ -165,7 +167,7 @@ public class BuilderBlockTileEntity extends BuilderBlock implements EntityBlock 
                 }
             }
         }
-        return super.getCloneItemStack(world, pos, state);
+        return super.getCloneItemStack(state, target, world, pos, player);
     }
 
     @SuppressWarnings("deprecation")

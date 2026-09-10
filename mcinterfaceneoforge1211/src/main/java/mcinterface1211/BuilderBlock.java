@@ -8,6 +8,7 @@ import minecrafttransportsimulator.blocks.components.ABlockBase;
 import minecrafttransportsimulator.blocks.instances.BlockBlock;
 import minecrafttransportsimulator.blocks.instances.BlockCollision;
 import net.minecraft.core.BlockPos;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.LevelReader;
@@ -16,6 +17,7 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockBehaviour;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.material.MapColor;
+import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraft.world.phys.shapes.VoxelShape;
@@ -53,7 +55,6 @@ public class BuilderBlock extends Block {
         this.block = block;
     }
 
-    @SuppressWarnings("deprecation")
     @Override
     public void onRemove(BlockState state, Level world, BlockPos pos, BlockState newState, boolean isMoving) {
         //Forward the breaking call to the block to allow for breaking logic.
@@ -61,18 +62,16 @@ public class BuilderBlock extends Block {
         super.onRemove(state, world, pos, newState, isMoving);
     }
 
-    @SuppressWarnings("deprecation")
     @Override
-    public ItemStack getCloneItemStack(LevelReader world, BlockPos pos, BlockState state) {
+    public ItemStack getCloneItemStack(BlockState state, HitResult target, LevelReader world, BlockPos pos, Player player) {
         if (block instanceof BlockBlock) {
             return new ItemStack(BuilderItem.itemMap.get(((BlockBlock) block).itemReference));
         } else {
-            return super.getCloneItemStack(world, pos, state);
+            return super.getCloneItemStack(state, target, world, pos, player);
         }
     }
 
     @Override
-    @SuppressWarnings("deprecation")
     public VoxelShape getShape(BlockState state, BlockGetter world, BlockPos pos, CollisionContext context) {
         if (block instanceof BlockCollision) {
             return Shapes.create(WrapperWorld.convert(((BlockCollision) block).blockBounds));

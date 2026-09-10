@@ -14,8 +14,6 @@ import minecrafttransportsimulator.mcinterface.IInterfaceCore;
 import minecrafttransportsimulator.mcinterface.IWrapperItemStack;
 import minecrafttransportsimulator.mcinterface.IWrapperNBT;
 import minecrafttransportsimulator.mcinterface.InterfaceManager;
-import net.minecraft.core.Holder;
-import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.tags.TagKey;
 import net.minecraft.world.item.Item;
@@ -110,17 +108,16 @@ class InterfaceCore implements IInterfaceCore {
         return !((WrapperItemStack) stackA).stack.isEmpty() && ((WrapperItemStack) stackA).stack.is(((WrapperItemStack) stackB).stack.getItem());
     }
 
-    @SuppressWarnings("deprecation")
     @Override
     public List<IWrapperItemStack> getOredictMaterials(String oreName, int stackSize) {
         //Convert to lowercase in case we are camelCase from oreDict systems.
         //Also do a bunch of stupid stream crap, cause hashmaps are clearly not made to lookup things...
         String lowerCaseOre = oreName.toLowerCase(Locale.ROOT);
         List<IWrapperItemStack> stacks = new ArrayList<>();
-        Stream<TagKey<Item>> tagStream = BuiltInRegistries.ITEM.getTagNames().filter(tagKey -> tagKey.location().getPath().equals(lowerCaseOre));
+        Stream<TagKey<Item>> tagStream = ForgeRegistries.ITEMS.tags().getTagNames().filter(tagKey -> tagKey.location().getPath().equals(lowerCaseOre));
         tagStream.forEach(tagKey -> {
-            for (Holder<Item> holder : BuiltInRegistries.ITEM.getTagOrEmpty(tagKey)) {
-                stacks.add(new WrapperItemStack(new ItemStack(holder.value(), stackSize)));
+            for (Item item : ForgeRegistries.ITEMS.tags().getTag(tagKey)) {
+                stacks.add(new WrapperItemStack(new ItemStack(item, stackSize)));
             }
         });
         //Couldn't find normal OreDict, check our internal stuff.

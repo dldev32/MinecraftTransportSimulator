@@ -83,6 +83,7 @@ import net.minecraft.world.level.block.FarmBlock;
 import net.minecraft.world.level.block.GrassBlock;
 import net.minecraft.world.level.block.LadderBlock;
 import net.minecraft.world.level.block.LanternBlock;
+import net.minecraft.world.level.block.LiquidBlock;
 import net.minecraft.world.level.block.SlabBlock;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.piston.PistonBaseBlock;
@@ -533,10 +534,14 @@ public class WrapperWorld extends AWrapperWorld {
         }
     }
 
-    @SuppressWarnings("deprecation")
     @Override
     public boolean isBlockLiquid(Point3D position) {
-        return world.getBlockState(BlockPos.containing(position.x, position.y, position.z)).liquid();
+        return isLiquidBlock(world.getBlockState(BlockPos.containing(position.x, position.y, position.z)));
+    }
+
+    private static boolean isLiquidBlock(BlockState state) {
+        //Waterlogged blocks keep their own collision shape; bubble columns are full liquid blocks.
+        return state.getBlock() instanceof LiquidBlock || state.is(Blocks.BUBBLE_COLUMN);
     }
 
     @Override
@@ -571,7 +576,6 @@ public class WrapperWorld extends AWrapperWorld {
         return bottomSlab ? position.y - (pos.getY() - 0.5) : position.y - pos.getY();
     }
 
-    @SuppressWarnings("deprecation")
     @Override
     public void updateBoundingBoxCollisions(BoundingBox box, Point3D collisionMotion, boolean ignoreIfGreater) {
         AABB mcBox = WrapperWorld.convert(box);
@@ -589,7 +593,7 @@ public class WrapperWorld extends AWrapperWorld {
                             mutableCollidingAABBs.addAll(collisionShape.toAabbs());
                             box.collidingBlockPositions.add(new Point3D(i, j, k));
                         }
-                        if (box.collidesWithLiquids && state.liquid()) {
+                        if (box.collidesWithLiquids && isLiquidBlock(state)) {
                             mutableCollidingAABBs.add(Shapes.block().bounds().move(pos));
                             box.collidingBlockPositions.add(new Point3D(i, j, k));
                         }
@@ -660,7 +664,6 @@ public class WrapperWorld extends AWrapperWorld {
         }
     }
 
-    @SuppressWarnings("deprecation")
     @Override
     public boolean checkForCollisions(BoundingBox box, Point3D offset, boolean clearCache, boolean breakLeaves) {
         if (clearCache) {
@@ -683,7 +686,7 @@ public class WrapperWorld extends AWrapperWorld {
                                 } else {
                                     knownAirBlocks.add(pos);
                                 }
-                                if (box.collidesWithLiquids && state.liquid()) {
+                                if (box.collidesWithLiquids && isLiquidBlock(state)) {
                                     if (mcBox.intersects(Shapes.block().bounds().move(pos))) {
                                         return true;
                                     }

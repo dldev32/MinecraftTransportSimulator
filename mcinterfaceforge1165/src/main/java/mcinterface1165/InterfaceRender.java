@@ -45,7 +45,6 @@ import net.minecraft.client.renderer.Tessellator;
 import net.minecraft.client.renderer.culling.ClippingHelper;
 import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.EntityRendererManager;
-import net.minecraft.client.renderer.texture.AtlasTexture;
 import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.client.renderer.texture.NativeImage;
 import net.minecraft.client.renderer.texture.OverlayTexture;
@@ -98,10 +97,9 @@ public class InterfaceRender implements IInterfaceRender {
         return new float[] { sprite.getU0(), sprite.getU1(), sprite.getV0(), sprite.getV1() };
     }
 
-    @SuppressWarnings("deprecation")
     @Override
     public float[] getDefaultBlockTexture(String name) {
-        TextureAtlasSprite sprite = Minecraft.getInstance().getBlockRenderer().getBlockModelShaper().getModelManager().getAtlas(AtlasTexture.LOCATION_BLOCKS).getSprite(new ResourceLocation(name.replace(":", ":blocks/")));
+        TextureAtlasSprite sprite = Minecraft.getInstance().getBlockRenderer().getBlockModelShaper().getModelManager().getAtlas(PlayerContainer.BLOCK_ATLAS).getSprite(new ResourceLocation(name.replace(":", ":blocks/")));
         return new float[] { sprite.getU0(), sprite.getU1(), sprite.getV0(), sprite.getV1() };
     }
 
@@ -343,7 +341,6 @@ public class InterfaceRender implements IInterfaceRender {
     /**
      * Renders the main GUI, setting up any transforms or operations as required.
      */
-    @SuppressWarnings("deprecation")
     protected static void renderGUI(MatrixStack stack, int mouseX, int mouseY, int screenWidth, int screenHeight, float partialTicks, boolean updateGUIs) {
         //Get the buffer for GUI rendering.
         matrixStack = stack;
@@ -394,11 +391,7 @@ public class InterfaceRender implements IInterfaceRender {
                     float zOffset = Minecraft.getInstance().getItemRenderer().blitOffset;
                     Minecraft.getInstance().getItemRenderer().blitOffset = (float) (200 + component.translation.z - 100);
                     if (component.scale != 1.0) {
-                        //Need to use RenderSystem here, since we can't access the stack directly for rendering scaling.
-                        RenderSystem.pushMatrix();
-                        RenderSystem.scalef(component.scale, component.scale, 1.0F);
-                        Minecraft.getInstance().getItemRenderer().renderGuiItem(((WrapperItemStack) component.stackToRender).stack, (int) (component.translation.x / component.scale), (int) (-component.translation.y / component.scale) + 1);
-                        RenderSystem.popMatrix();
+                        renderScaledGUIItem(component);
                     } else {
                         Minecraft.getInstance().getItemRenderer().renderGuiItem(((WrapperItemStack) component.stackToRender).stack, (int) component.translation.x, (int) -component.translation.y);
                     }
@@ -411,6 +404,21 @@ public class InterfaceRender implements IInterfaceRender {
         }
         matrixStack.popPose();
         renderingGUI = false;
+    }
+
+    /**
+     * The 1.16.5 GUI item renderer uses the global matrix and does not accept a MatrixStack.
+     * Keep its required legacy transforms confined to this compatibility helper.
+     */
+    @SuppressWarnings("deprecation")
+    private static void renderScaledGUIItem(GUIComponentItem component) {
+        RenderSystem.pushMatrix();
+        try {
+            RenderSystem.scalef(component.scale, component.scale, 1.0F);
+            Minecraft.getInstance().getItemRenderer().renderGuiItem(((WrapperItemStack) component.stackToRender).stack, (int) (component.translation.x / component.scale), (int) (-component.translation.y / component.scale) + 1);
+        } finally {
+            RenderSystem.popMatrix();
+        }
     }
 
     /**

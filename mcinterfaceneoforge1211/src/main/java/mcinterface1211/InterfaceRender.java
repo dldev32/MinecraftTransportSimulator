@@ -57,11 +57,11 @@ import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.client.renderer.texture.OverlayTexture;
-import net.minecraft.client.renderer.texture.TextureAtlas;
 import net.minecraft.client.renderer.texture.TextureAtlasSprite;
 import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
+import net.minecraft.world.inventory.InventoryMenu;
 import net.minecraft.world.level.LightLayer;
 import net.minecraft.world.level.block.state.BlockState;
 import net.neoforged.neoforge.client.event.EntityRenderersEvent.RegisterRenderers;
@@ -88,8 +88,7 @@ public class InterfaceRender implements IInterfaceRender {
     /**Cache for resolved TextureStateShards to avoid repeated classpath lookups via getPackResource().*/
     private static final ConcurrentHashMap<String, RenderStateShard.TextureStateShard> textureStateCache = new ConcurrentHashMap<>();
 
-    @SuppressWarnings("deprecation")
-    private static final ResourceLocation BLOCK_TEXTURE_LOCATION = TextureAtlas.LOCATION_BLOCKS;
+    private static final ResourceLocation BLOCK_TEXTURE_LOCATION = InventoryMenu.BLOCK_ATLAS;
     private static RenderStateShard.TextureStateShard MISSING_STATE;
     private static RenderStateShard.TextureStateShard BLOCK_STATE;
     public static PoseStack matrixStack;

@@ -8,6 +8,9 @@ base.archivesName = project.archive_name
 
 java.toolchain.languageVersion = JavaLanguageVersion.of(21)
 
+// Ensure mccore is evaluated first so we can reference its sourceSets.
+evaluationDependsOn(":mccore")
+
 neoForge {
     version = project.neoforge_version
     parchment {
@@ -27,6 +30,13 @@ neoForge {
     mods {
         mts {
             sourceSet sourceSets.main
+            // Include mccore's own source set so its classes are part of the
+            // mts module during dev runs. This lets the mixin system find
+            // mccore classes (they are compileOnly and only embedded in the
+            // production fat JAR). Using the source set avoids JPMS split-
+            // package errors because it does not pull in the embedded
+            // jorbis/jlayer JARs — only mccore's own compiled classes.
+            sourceSet project(":mccore").sourceSets.main
         }
     }
 }

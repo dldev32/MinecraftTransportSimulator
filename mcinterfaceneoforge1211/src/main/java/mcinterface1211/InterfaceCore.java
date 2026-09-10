@@ -178,7 +178,6 @@ class InterfaceCore implements IInterfaceCore {
         return !((WrapperItemStack) stackA).stack.isEmpty() && ((WrapperItemStack) stackA).stack.is(((WrapperItemStack) stackB).stack.getItem());
     }
 
-    @SuppressWarnings("deprecation")
     @Override
     public List<IWrapperItemStack> getOredictMaterials(String oreName, int stackSize) {
         //Convert to lowercase in case we are camelCase from oreDict systems.

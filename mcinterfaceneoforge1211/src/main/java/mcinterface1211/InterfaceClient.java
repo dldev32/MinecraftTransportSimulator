@@ -146,7 +146,7 @@ public class InterfaceClient implements IInterfaceClient {
     public Map<String, String> getAllFluidNames() {
         Map<String, String> fluidIDsToNames = new HashMap<>();
         for (Fluid fluid : BuiltInRegistries.FLUID) {
-            fluidIDsToNames.put(BuiltInRegistries.FLUID.getKey(fluid).getPath(), new FluidStack(fluid, 1).getDisplayName().getString());
+            fluidIDsToNames.put(BuiltInRegistries.FLUID.getKey(fluid).getPath(), new FluidStack(fluid, 1).getHoverName().getString());
         }
         return fluidIDsToNames;
     }

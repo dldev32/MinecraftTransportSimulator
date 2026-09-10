@@ -18,7 +18,6 @@ import net.minecraft.item.ItemStack;
 import net.minecraft.tags.ITag;
 import net.minecraft.tags.ItemTags;
 import net.minecraft.util.ResourceLocation;
-import net.minecraft.util.registry.Registry;
 import net.minecraftforge.fml.ModContainer;
 import net.minecraftforge.fml.ModList;
 import net.minecraftforge.registries.ForgeRegistries;
@@ -99,10 +98,9 @@ class InterfaceCore implements IInterfaceCore {
         return newStack;
     }
 
-    @SuppressWarnings("deprecation")
     @Override
     public IWrapperItemStack getStackForProperties(String name, int meta, int qty) {
-        Item item = Registry.ITEM.get(ResourceLocation.tryParse(name));
+        Item item = ForgeRegistries.ITEMS.getValue(ResourceLocation.tryParse(name));
         if (item != null) {
             return new WrapperItemStack(new ItemStack(item, qty));
         } else {

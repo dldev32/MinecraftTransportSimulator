@@ -33,6 +33,7 @@ import net.minecraft.util.Direction;
 import net.minecraft.util.Hand;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.BlockRayTraceResult;
+import net.minecraft.util.math.RayTraceResult;
 import net.minecraft.util.math.shapes.ISelectionContext;
 import net.minecraft.util.math.shapes.VoxelShape;
 import net.minecraft.util.math.shapes.VoxelShapes;
@@ -47,6 +48,9 @@ import net.minecraftforge.registries.ForgeRegistries;
  * block (so no culling) and may have alpha channels in the texture (like glass).
  * It also assumes the block can be rotated, and saves the rotation as a set of
  * FACING properties.  This MAY change in later versions to TE data though...
+ *
+ * Minecraft marks its BlockState implementation hooks deprecated for callers, but overrides
+ * and their super calls are required here; calling through the state would recurse.
  *
  * @author don_bruce
  */
@@ -125,9 +129,8 @@ public class BuilderBlock extends Block {
         return super.updateShape(state, facing, facingState, world, pos, facingPos);
     }
 
-    @SuppressWarnings("deprecation")
     @Override
-    public ItemStack getCloneItemStack(IBlockReader world, BlockPos pos, BlockState state) {
+    public ItemStack getPickBlock(BlockState state, RayTraceResult target, IBlockReader world, BlockPos pos, PlayerEntity player) {
         //Returns the ItemStack that gets put in the player's inventory when they middle-click this block.
         //This calls down into getItem, which then uses the Item class's block<->item mapping to get a block.
         //By overriding here, we intercept those calls and return our own.  This also allows us to put NBT
@@ -149,7 +152,7 @@ public class BuilderBlock extends Block {
         } else if (block instanceof BlockBlock) {
             return new ItemStack(BuilderItem.itemMap.get(((BlockBlock) block).itemReference));
         }
-        return super.getCloneItemStack(world, pos, state);
+        return super.getPickBlock(state, target, world, pos, player);
     }
 
     @SuppressWarnings("deprecation")
