@@ -191,6 +191,9 @@ public class InterfaceRender implements IInterfaceRender {
     
     @Override
     public void renderVertices(RenderableData data, boolean changedSinceLastRender) {
+        if (renderingParticles && WrapperParticle.queueTranslucent(data)) {
+            return;
+        }
         matrixStack.pushPose();
         Matrix4f matrix4f = convertMatrix4f(data.transform);
         Matrix3f matrix3f = new Matrix3f(matrix4f);
@@ -270,13 +273,8 @@ public class InterfaceRender implements IInterfaceRender {
                 renders.add(new RenderData(stackEntry.pose(), bufferData));
             } else {
                 stackEntry.normal().mul(matrix3f);
-                //Use TRIANGLES directly.  Disable sortOnUpload (false) because MC's sortQuads
-                //assumes QUADS format and corrupts triangle vertex data, causing UV artifacts.
-                //Translucent depth sorting is handled by MTS's own render ordering instead.
+                //MC only sorts quads.  WrapperParticle orders translucent particle triangles before submission.
                 renderType = renderTypes.computeIfAbsent(typeID, k -> CustomRenderType.create("mts_entity_" + typeID, DefaultVertexFormat.NEW_ENTITY, VertexFormat.Mode.TRIANGLES, 2097152, true, false, CustomRenderType.createForObject(data).createCompositeState(false)));
-                if (renderingParticles) {
-                    WrapperParticle.classifyRenderType(renderType, data.isTranslucent || data.enableBrightBlending);
-                }
                 VertexConsumer buffer = renderBuffer.getBuffer(renderType);
                 while (data.vertexObject.vertices.hasRemaining()) {
                     //Need to parse these out first since our order differs.
@@ -430,7 +428,8 @@ public class InterfaceRender implements IInterfaceRender {
             if (data.enableBrightBlending) {
                 stateBuilder.setTransparencyState(BRIGHTNESS_TRANSPARENCY);
             } else if (data.isTranslucent) {
-                stateBuilder.setTransparencyState(PROPER_TRANSLUCENT_TRANSPARENCY);
+                //The particle target needs accumulated coverage alpha for Fabulous compositing.
+                stateBuilder.setTransparencyState(renderingParticles ? TRANSLUCENT_TRANSPARENCY : PROPER_TRANSLUCENT_TRANSPARENCY);
             } else {
                 stateBuilder.setTransparencyState(NO_TRANSPARENCY);
             }

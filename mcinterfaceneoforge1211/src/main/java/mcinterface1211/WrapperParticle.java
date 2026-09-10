@@ -1,8 +1,11 @@
 package mcinterface1211;
 
-import java.util.HashSet;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
-import java.util.Set;
+import java.util.List;
+
+import org.joml.Matrix4f;
 
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.ByteBufferBuilder;
@@ -11,6 +14,7 @@ import com.mojang.blaze3d.vertex.VertexConsumer;
 
 import minecrafttransportsimulator.baseclasses.TransformationMatrix;
 import minecrafttransportsimulator.particles.ParticleObject;
+import minecrafttransportsimulator.rendering.RenderableData;
 import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
@@ -101,20 +105,26 @@ public final class WrapperParticle extends Particle {
         return AABB.INFINITE;
     }
 
-    static void classifyRenderType(RenderType type, boolean translucent) {
-        if (translucent) {
-            particleBuffers.translucentTypes.add(type);
+    static boolean queueTranslucent(RenderableData data) {
+        if (!particleBuffers.drawingTranslucent && (data.isTranslucent || data.enableBrightBlending)) {
+            particleBuffers.translucentRenders.add(data);
+            return true;
         }
+        return false;
     }
 
     @SubscribeEvent
     public static void onRenderLevelStage(RenderLevelStageEvent event) {
         if (event.getStage() == RenderLevelStageEvent.Stage.AFTER_PARTICLES && particleBuffers != null) {
-            particleBuffers.finish();
-            RenderSystem.depthMask(true);
-            RenderSystem.disableBlend();
-            if (Minecraft.useShaderTransparency()) {
-                Minecraft.getInstance().levelRenderer.getParticlesTarget().bindWrite(false);
+            try {
+                particleBuffers.finish();
+            } finally {
+                RenderSystem.enableDepthTest();
+                RenderSystem.depthMask(true);
+                RenderSystem.disableBlend();
+                if (Minecraft.useShaderTransparency()) {
+                    Minecraft.getInstance().levelRenderer.getParticlesTarget().bindWrite(false);
+                }
             }
         }
     }
@@ -128,7 +138,9 @@ public final class WrapperParticle extends Particle {
     }
 
     private static final class ParticleBuffers extends MultiBufferSource.BufferSource {
-        private final Set<RenderType> translucentTypes = new HashSet<>();
+        private final List<RenderableData> translucentRenders = new ArrayList<>();
+        private final Matrix4f viewMatrix = new Matrix4f();
+        private boolean drawingTranslucent;
 
         private ParticleBuffers() {
             super(new ByteBufferBuilder(4096), new LinkedHashMap<>());
@@ -136,22 +148,48 @@ public final class WrapperParticle extends Particle {
 
         @Override
         public VertexConsumer getBuffer(RenderType type) {
-            // Fixed buffers keep alternating particle textures in one batch per material.
-            fixedBuffers.computeIfAbsent(type, key -> new ByteBufferBuilder(4096));
+            // Only opaque particles may be regrouped by material.  Translucent material
+            // changes must flush the shared buffer to preserve back-to-front ordering.
+            if (!drawingTranslucent) {
+                fixedBuffers.computeIfAbsent(type, key -> new ByteBufferBuilder(4096));
+            }
             return super.getBuffer(type);
         }
 
         private void finish() {
-            // Draw depth-writing models before smoke and other translucent particles.
-            for (RenderType type : fixedBuffers.keySet()) {
-                if (!translucentTypes.contains(type)) {
-                    endBatch(type);
+            PoseStack previousMatrices = InterfaceRender.matrixStack;
+            MultiBufferSource previousBuffer = InterfaceRender.renderBuffer;
+            boolean previousParticles = InterfaceRender.renderingParticles;
+            InterfaceRender.matrixStack = particleMatrices;
+            InterfaceRender.renderBuffer = this;
+            InterfaceRender.renderingParticles = true;
+            try {
+                // Draw depth-writing models before smoke and other translucent particles.
+                endBatch();
+                viewMatrix.set(RenderSystem.getModelViewMatrix());
+                translucentRenders.sort(Comparator.comparingDouble(this::getDepth));
+                drawingTranslucent = true;
+                for (RenderableData data : translucentRenders) {
+                    data.render();
                 }
+                endBatch();
+            } finally {
+                translucentRenders.clear();
+                drawingTranslucent = false;
+                InterfaceRender.matrixStack = previousMatrices;
+                InterfaceRender.renderBuffer = previousBuffer;
+                InterfaceRender.renderingParticles = previousParticles;
             }
-            endBatch();
+        }
+
+        private double getDepth(RenderableData data) {
+            // The prepared transform includes interpolation and attachment offsets.
+            // View-space Z is negative in front of the camera, so farther sorts first.
+            return viewMatrix.m02() * data.transform.m03 + viewMatrix.m12() * data.transform.m13 + viewMatrix.m22() * data.transform.m23 + viewMatrix.m32();
         }
 
         private void close() {
+            translucentRenders.clear();
             fixedBuffers.values().forEach(ByteBufferBuilder::close);
             fixedBuffers.clear();
             sharedBuffer.close();

@@ -107,9 +107,13 @@ public class InterfaceRender implements IInterfaceRender {
     @Override
     public void renderVertices(RenderableData data, boolean changedSinceLastRender) {
         if (renderingParticles) {
-            setBlend(data.isTranslucent || data.enableBrightBlending);
+            if (BuilderParticle.queueTranslucent(data)) {
+                return;
+            }
+            boolean translucent = data.isTranslucent || data.enableBrightBlending;
+            setBlend(translucent);
             GlStateManager.blendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
-            GlStateManager.depthMask(!data.isTranslucent);
+            GlStateManager.depthMask(!translucent);
         }
         if (data.lightingMode.disableWorldLighting || data.vertexObject.isLines) {
             setLightingState(false);

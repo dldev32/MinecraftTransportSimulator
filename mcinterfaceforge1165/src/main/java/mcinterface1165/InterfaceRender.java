@@ -6,12 +6,10 @@ import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
-import java.util.Set;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
 import javax.imageio.ImageIO;
@@ -90,7 +88,6 @@ public class InterfaceRender implements IInterfaceRender {
     public static Point3D renderCameraOffset = new Point3D();
     private static boolean renderingGUI;
     static boolean renderingParticles;
-    static final Set<RenderType> translucentParticleRenderTypes = new HashSet<>();
     private static float[] matrixConvertArray = new float[16];
 
     @Override
@@ -132,6 +129,9 @@ public class InterfaceRender implements IInterfaceRender {
     
     @Override
     public void renderVertices(RenderableData data, boolean changedSinceLastRender) {
+        if (renderingParticles && BuilderParticle.queueTranslucent(data)) {
+            return;
+        }
         matrixStack.pushPose();
         Matrix4f matrix4f = convertMatrix4f(data.transform);
         MatrixStack.Entry stackEntry = matrixStack.last();
@@ -195,10 +195,7 @@ public class InterfaceRender implements IInterfaceRender {
                 }
                 renders.add(new RenderData(stackEntry.pose(), buffer.buffer));
             } else {
-                renderType = renderTypes.computeIfAbsent(typeID, k -> CustomRenderType.create("mts_entity", DefaultVertexFormats.NEW_ENTITY, 7, 256, true, data.isTranslucent, CustomRenderType.createForObject(data).createCompositeState(false)));
-                if (renderingParticles && (data.isTranslucent || data.enableBrightBlending)) {
-                    translucentParticleRenderTypes.add(renderType);
-                }
+                renderType = renderTypes.computeIfAbsent(typeID, k -> CustomRenderType.create("mts_entity", DefaultVertexFormats.NEW_ENTITY, 7, 256, true, data.isTranslucent && !renderingParticles, CustomRenderType.createForObject(data).createCompositeState(false)));
                 IVertexBuilder buffer = renderBuffer.getBuffer(renderType);
                 
                 //Now populate the state we requested.
@@ -563,7 +560,7 @@ public class InterfaceRender implements IInterfaceRender {
 
             stateBuilder.setTextureState(data.texture != null ? getTexture(data.texture) : NO_TEXTURE);
             //Transparency is also blend function, so we need to override that with a custom one if we are doing bright blending.
-            stateBuilder.setTransparencyState(data.enableBrightBlending ? BRIGHTNESS_TRANSPARENCY : (data.isTranslucent ? PROPER_TRANSLUCENT_TRANSPARENCY : RenderType.NO_TRANSPARENCY));
+            stateBuilder.setTransparencyState(data.enableBrightBlending ? BRIGHTNESS_TRANSPARENCY : (data.isTranslucent ? (renderingParticles ? TRANSLUCENT_TRANSPARENCY : PROPER_TRANSLUCENT_TRANSPARENCY) : RenderType.NO_TRANSPARENCY));
             //Diffuse lighting is the ambient lighting that auto-shades models.
             stateBuilder.setDiffuseLightingState(data.lightingMode.disableTextureShadows ? NO_DIFFUSE_LIGHTING : DIFFUSE_LIGHTING);
             //Always smooth shading.

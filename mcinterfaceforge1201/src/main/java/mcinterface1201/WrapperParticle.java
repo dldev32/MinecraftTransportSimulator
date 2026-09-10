@@ -1,7 +1,12 @@
 package mcinterface1201;
 
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
+
+import org.joml.Matrix4f;
 
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.BufferBuilder;
@@ -11,6 +16,7 @@ import com.mojang.blaze3d.vertex.VertexConsumer;
 
 import minecrafttransportsimulator.baseclasses.TransformationMatrix;
 import minecrafttransportsimulator.particles.ParticleObject;
+import minecrafttransportsimulator.rendering.RenderableData;
 import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
@@ -23,11 +29,19 @@ import net.minecraft.world.phys.Vec3;
 
 /** Lets Minecraft own particle ticking, rendering, and lifetime limits. */
 public class WrapperParticle extends Particle {
-    private static final ParticleRenderType RENDER_TYPE = new ParticleRenderType() {
+    private static final ParticleRenderer RENDER_TYPE = new ParticleRenderer();
+
+    private static final class ParticleRenderer implements ParticleRenderType {
+        private final List<RenderableData> translucentRenders = new ArrayList<>();
+        private final Matrix4f viewMatrix = new Matrix4f();
+        private boolean drawingTranslucent;
         private final Map<RenderType, BufferBuilder> builders = new LinkedHashMap<>();
         private final MultiBufferSource.BufferSource buffers = MultiBufferSource.immediateWithBuffers(builders, new BufferBuilder(256));
         private final MultiBufferSource particleBuffers = renderType -> {
-            builders.computeIfAbsent(renderType, key -> new BufferBuilder(256));
+            //Only opaque particles may be regrouped by material.
+            if (!drawingTranslucent) {
+                builders.computeIfAbsent(renderType, key -> new BufferBuilder(256));
+            }
             return buffers.getBuffer(renderType);
         };
         private final PoseStack particleMatrixStack = new PoseStack();
@@ -37,6 +51,8 @@ public class WrapperParticle extends Particle {
 
         @Override
         public void begin(BufferBuilder builder, TextureManager textureManager) {
+            translucentRenders.clear();
+            drawingTranslucent = false;
             previousMatrixStack = InterfaceRender.matrixStack;
             previousRenderBuffer = InterfaceRender.renderBuffer;
             previouslyRenderingParticles = InterfaceRender.renderingParticles;
@@ -45,23 +61,29 @@ public class WrapperParticle extends Particle {
             InterfaceRender.renderBuffer = particleBuffers;
             InterfaceRender.renderingParticles = true;
             RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
+            RenderSystem.enableDepthTest();
+            RenderSystem.depthMask(true);
         }
 
         @Override
         public void end(Tesselator tesselator) {
             try {
                 //Solid particles must fill the depth buffer before translucent particles blend over them.
-                for (RenderType renderType : builders.keySet()) {
-                    if (!InterfaceRender.translucentParticleRenderTypes.contains(renderType)) {
-                        buffers.endBatch(renderType);
-                    }
+                buffers.endBatch();
+                viewMatrix.set(RenderSystem.getModelViewMatrix());
+                translucentRenders.sort(Comparator.comparingDouble(this::getDepth));
+                drawingTranslucent = true;
+                for (RenderableData data : translucentRenders) {
+                    data.render();
                 }
-                for (RenderType renderType : builders.keySet()) {
-                    if (InterfaceRender.translucentParticleRenderTypes.contains(renderType)) {
-                        buffers.endBatch(renderType);
-                    }
-                }
+                //Shared buffers flush on material changes, preserving the sorted order.
+                buffers.endBatch();
             } finally {
+                translucentRenders.clear();
+                drawingTranslucent = false;
+                RenderSystem.enableDepthTest();
+                RenderSystem.depthMask(true);
+                RenderSystem.disableBlend();
                 InterfaceRender.matrixStack = previousMatrixStack;
                 InterfaceRender.renderBuffer = previousRenderBuffer;
                 InterfaceRender.renderingParticles = previouslyRenderingParticles;
@@ -72,11 +94,24 @@ public class WrapperParticle extends Particle {
             }
         }
 
+        private double getDepth(RenderableData data) {
+            //Prepared transforms include interpolation and attachment offsets; farther Z is more negative.
+            return viewMatrix.m02() * data.transform.m03 + viewMatrix.m12() * data.transform.m13 + viewMatrix.m22() * data.transform.m23 + viewMatrix.m32();
+        }
+
         @Override
         public String toString() {
             return "MTS_PARTICLES";
         }
-    };
+    }
+
+    static boolean queueTranslucent(RenderableData data) {
+        if (!RENDER_TYPE.drawingTranslucent && (data.isTranslucent || data.enableBrightBlending)) {
+            RENDER_TYPE.translucentRenders.add(data);
+            return true;
+        }
+        return false;
+    }
 
     private final ParticleObject particle;
     private final TransformationMatrix transform = new TransformationMatrix();

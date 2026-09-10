@@ -7,12 +7,10 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
-import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
@@ -61,6 +59,7 @@ import net.minecraft.client.renderer.texture.TextureAtlas;
 import net.minecraft.client.renderer.texture.TextureAtlasSprite;
 import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.packs.resources.ResourceProvider;
 import net.minecraft.util.Mth;
 import net.minecraft.world.level.LightLayer;
 import net.minecraft.world.level.block.state.BlockState;
@@ -95,10 +94,13 @@ public class InterfaceRender implements IInterfaceRender {
     public static Point3D renderCameraOffset = new Point3D();
     private static boolean renderingGUI;
     static boolean renderingParticles;
-    static final Set<RenderType> translucentParticleRenderTypes = new HashSet<>();
 
     private static ShaderInstance entityLightsShader;
     private static ShaderInstance entityCutoutNoshadowsShader;
+    private static ParticleShader particleLightsShader;
+    private static ParticleShader particleCutoutNoshadowsShader;
+    private static ParticleShader particleSolidShader;
+    private static ParticleShader particleCutoutShader;
     private static final RenderStateShard.ShaderStateShard MTS_ENTITY_LIGHTS_SHADER = new RenderStateShard.ShaderStateShard(() -> entityLightsShader);
     private static final RenderStateShard.ShaderStateShard MTS_ENTITY_CUTOUT_NOSHADOWS_SHADER = new RenderStateShard.ShaderStateShard(() -> entityCutoutNoshadowsShader);
 
@@ -106,6 +108,10 @@ public class InterfaceRender implements IInterfaceRender {
         try {
             event.registerShader(new ShaderInstance(event.getResourceProvider(), new ResourceLocation(InterfaceLoader.MODID, "mts_entity_lights"), DefaultVertexFormat.NEW_ENTITY), (createdShader) -> entityLightsShader = createdShader);
             event.registerShader(new ShaderInstance(event.getResourceProvider(), new ResourceLocation(InterfaceLoader.MODID, "mts_entity_cutout_noshadows"), DefaultVertexFormat.NEW_ENTITY), (createdShader) -> entityCutoutNoshadowsShader = createdShader);
+            event.registerShader(new ParticleShader(event.getResourceProvider(), new ResourceLocation(InterfaceLoader.MODID, "mts_entity_lights")), (createdShader) -> particleLightsShader = (ParticleShader) createdShader);
+            event.registerShader(new ParticleShader(event.getResourceProvider(), new ResourceLocation(InterfaceLoader.MODID, "mts_entity_cutout_noshadows")), (createdShader) -> particleCutoutNoshadowsShader = (ParticleShader) createdShader);
+            event.registerShader(new ParticleShader(event.getResourceProvider(), new ResourceLocation("rendertype_entity_solid")), (createdShader) -> particleSolidShader = (ParticleShader) createdShader);
+            event.registerShader(new ParticleShader(event.getResourceProvider(), new ResourceLocation("rendertype_entity_cutout")), (createdShader) -> particleCutoutShader = (ParticleShader) createdShader);
         } catch (IOException e) {
             InterfaceManager.coreInterface.logError("COULD NOT LOAD SHADER FOR LIGHTS!  THIS WILL END BADLY FOR RENDERING!");
             e.printStackTrace();
@@ -188,6 +194,9 @@ public class InterfaceRender implements IInterfaceRender {
     
     @Override
     public void renderVertices(RenderableData data, boolean changedSinceLastRender) {
+        if (renderingParticles && WrapperParticle.queueTranslucent(data)) {
+            return;
+        }
         matrixStack.pushPose();
         Matrix4f matrix4f = convertMatrix4f(data.transform);
         Matrix3f matrix3f = new Matrix3f(matrix4f);
@@ -271,10 +280,8 @@ public class InterfaceRender implements IInterfaceRender {
                 renders.add(new RenderData(stackEntry.pose(), bufferData));
             } else {
                 stackEntry.normal().mul(matrix3f);
-                renderType = renderTypes.computeIfAbsent(typeID, k -> CustomRenderType.create("mts_entity_" + typeID, DefaultVertexFormat.NEW_ENTITY, VertexFormat.Mode.TRIANGLES, 256, true, data.isTranslucent, CustomRenderType.createForObject(data).createCompositeState(false)));
-                if (renderingParticles && (data.isTranslucent || data.enableBrightBlending)) {
-                    translucentParticleRenderTypes.add(renderType);
-                }
+                //Particle triangles are already ordered by WrapperParticle; native sorting only handles quads.
+                renderType = renderTypes.computeIfAbsent(typeID, k -> CustomRenderType.create("mts_entity_" + typeID, DefaultVertexFormat.NEW_ENTITY, VertexFormat.Mode.TRIANGLES, 256, true, !renderingParticles && data.isTranslucent, CustomRenderType.createForObject(data).createCompositeState(false)));
                 VertexConsumer buffer = renderBuffer.getBuffer(renderType);
                 //System.out.println(renderType);
                 while (data.vertexObject.vertices.hasRemaining()) {
@@ -400,6 +407,28 @@ public class InterfaceRender implements IInterfaceRender {
         }
     }
 
+    private static final class ParticleShader extends ShaderInstance {
+        private RenderStateShard.TransparencyStateShard transparency;
+
+        private ParticleShader(ResourceProvider resources, ResourceLocation location) throws IOException {
+            super(resources, location, DefaultVertexFormat.NEW_ENTITY);
+        }
+
+        @Override
+        public void apply() {
+            super.apply();
+            //Shader JSON blending is applied after RenderType state in these versions.
+            //Restore the particle's actual blend mode, including the target's alpha channel.
+            transparency.setupRenderState();
+        }
+
+        @Override
+        public String getName() {
+            //Keep these instances separate from entity shaders during resource reloads.
+            return super.getName() + "_particle";
+        }
+    }
+
     private static class CustomRenderType extends RenderType {
         private CustomRenderType(String name, VertexFormat fmt, Mode glMode, int size, boolean doCrumbling, boolean depthSorting, Runnable onEnable, Runnable onDisable) {
             super(name, fmt, glMode, size, doCrumbling, depthSorting, onEnable, onDisable);
@@ -431,6 +460,19 @@ public class InterfaceRender implements IInterfaceRender {
                 stateBuilder.setTransparencyState(PROPER_TRANSLUCENT_TRANSPARENCY);
             } else {
                 stateBuilder.setTransparencyState(NO_TRANSPARENCY);
+            }
+
+            if (renderingParticles) {
+                final boolean disableTextureShadows = data.lightingMode.disableTextureShadows;
+                final boolean disableWorldLighting = data.lightingMode.disableWorldLighting;
+                final boolean translucent = data.isTranslucent;
+                final RenderStateShard.TransparencyStateShard transparency = data.enableBrightBlending ? BRIGHTNESS_TRANSPARENCY : translucent ? TRANSLUCENT_TRANSPARENCY : NO_TRANSPARENCY;
+                stateBuilder.setTransparencyState(transparency);
+                stateBuilder.setShaderState(new RenderStateShard.ShaderStateShard(() -> {
+                    ParticleShader shader = disableTextureShadows ? (disableWorldLighting ? particleLightsShader : particleCutoutNoshadowsShader) : (translucent ? particleSolidShader : particleCutoutShader);
+                    shader.transparency = transparency;
+                    return shader;
+                }));
             }
 
             //Texture is just based on what is specified.
