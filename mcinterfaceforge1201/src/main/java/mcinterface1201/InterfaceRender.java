@@ -44,6 +44,7 @@ import minecrafttransportsimulator.rendering.GIFParser.ParsedGIF;
 import minecrafttransportsimulator.rendering.RenderableData;
 import minecrafttransportsimulator.systems.ConfigSystem;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.renderer.GameRenderer;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.renderer.LightTexture;
 import net.minecraft.client.renderer.MultiBufferSource;
@@ -301,7 +302,7 @@ public class InterfaceRender implements IInterfaceRender {
                     buffer.color(data.color.red, data.color.green, data.color.blue, data.alpha);
                     buffer.uv(texU, texV);
                     buffer.overlayCoords(OverlayTexture.NO_OVERLAY);
-                    buffer.uv2(data.worldLightValue);
+                    buffer.uv2(renderingParticles && data.lightingMode.disableWorldLighting ? LightTexture.FULL_BRIGHT : data.worldLightValue);
                     buffer.normal(stackEntry.normal(), normalX, normalY, normalZ);
                     buffer.endVertex();
                 }
@@ -465,10 +466,16 @@ public class InterfaceRender implements IInterfaceRender {
             if (renderingParticles) {
                 final boolean disableTextureShadows = data.lightingMode.disableTextureShadows;
                 final boolean disableWorldLighting = data.lightingMode.disableWorldLighting;
-                final boolean translucent = data.isTranslucent;
+                final boolean translucent = data.isTranslucent || data.enableBrightBlending;
                 final RenderStateShard.TransparencyStateShard transparency = data.enableBrightBlending ? BRIGHTNESS_TRANSPARENCY : translucent ? TRANSLUCENT_TRANSPARENCY : NO_TRANSPARENCY;
                 stateBuilder.setTransparencyState(transparency);
                 stateBuilder.setShaderState(new RenderStateShard.ShaderStateShard(() -> {
+                    //Shader packs replace Minecraft's shader getters and suppress ordinary custom shaders.
+                    //Resolve each draw so toggling or reloading a pack cannot leave a stale shader cached.
+                    ShaderInstance nativeShader = disableTextureShadows && disableWorldLighting ? (translucent ? GameRenderer.getRendertypeEntityTranslucentEmissiveShader() : GameRenderer.getRendertypeEyesShader()) : (translucent ? GameRenderer.getRendertypeEntityTranslucentShader() : (disableTextureShadows ? GameRenderer.getRendertypeEnergySwirlShader() : GameRenderer.getRendertypeEntityCutoutShader()));
+                    if (nativeShader.getClass() != ShaderInstance.class) {
+                        return nativeShader;
+                    }
                     ParticleShader shader = disableTextureShadows ? (disableWorldLighting ? particleLightsShader : particleCutoutNoshadowsShader) : (translucent ? particleSolidShader : particleCutoutShader);
                     shader.transparency = transparency;
                     return shader;

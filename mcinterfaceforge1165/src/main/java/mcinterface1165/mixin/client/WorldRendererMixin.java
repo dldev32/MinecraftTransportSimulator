@@ -38,7 +38,9 @@ public abstract class WorldRendererMixin {
     @Inject(method = "renderLevel", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/renderer/RenderType;translucent()Lnet/minecraft/client/renderer/RenderType;"))
     public void inject_renderLevelBlended(MatrixStack pMatrixStack, float pPartialTicks, long pFinishTimeNano, boolean pDrawBlockOutline, ActiveRenderInfo pActiveRenderInfo, GameRenderer pGameRenderer, LightTexture pLightmap, Matrix4f pProjection, CallbackInfo ci) {
         //Fabulous's preceding depth copy unbinds the framebuffer; bright blending needs the main scene.
-        Minecraft.getInstance().getMainRenderTarget().bindWrite(false);
+        if (Minecraft.useShaderTransparency()) {
+            Minecraft.getInstance().getMainRenderTarget().bindWrite(false);
+        }
         InterfaceRender.projectionMatrix = pProjection;
         IRenderTypeBuffer.Impl irendertypebuffer$impl = renderBuffers.bufferSource();
         //Set camera offset point for later.

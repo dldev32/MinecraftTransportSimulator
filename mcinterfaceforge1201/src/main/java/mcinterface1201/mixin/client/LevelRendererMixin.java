@@ -61,7 +61,10 @@ public abstract class LevelRendererMixin {
     @Inject(method = "renderLevel", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/renderer/RenderType;translucent()Lnet/minecraft/client/renderer/RenderType;"))
     public void inject_renderLevelBlended(PoseStack pMatrixStack, float pPartialTicks, long pFinishTimeNano, boolean pDrawBlockOutline, Camera pCamera, GameRenderer pGameRenderer, LightTexture pLightmap, Matrix4f pProjection, CallbackInfo ci) {
         //Fabulous copies depth without leaving the main framebuffer bound.
-        Minecraft.getInstance().getMainRenderTarget().bindWrite(false);
+        //Other pipelines, including shader packs, keep their own framebuffer active here.
+        if (Minecraft.useShaderTransparency()) {
+            Minecraft.getInstance().getMainRenderTarget().bindWrite(false);
+        }
         MultiBufferSource.BufferSource irendertypebuffer$impl = renderBuffers.bufferSource();
         //Set camera offset point for later.
         Vec3 position = Minecraft.getInstance().gameRenderer.getMainCamera().getPosition();

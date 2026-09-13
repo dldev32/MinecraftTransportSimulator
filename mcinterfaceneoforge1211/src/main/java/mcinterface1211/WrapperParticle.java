@@ -27,7 +27,6 @@ import net.minecraft.world.phys.Vec3;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
-import net.neoforged.neoforge.client.event.RenderLevelStageEvent;
 import net.neoforged.neoforge.event.level.LevelEvent;
 
 /** Native particle lifecycle with shared buffers for pack textures and models. */
@@ -76,6 +75,7 @@ public final class WrapperParticle extends Particle {
         if (particleBuffers == null) {
             particleBuffers = new ParticleBuffers();
         }
+        particleBuffers.hasParticles = true;
         PoseStack previousMatrices = InterfaceRender.matrixStack;
         MultiBufferSource previousBuffer = InterfaceRender.renderBuffer;
         boolean previousParticles = InterfaceRender.renderingParticles;
@@ -113,12 +113,22 @@ public final class WrapperParticle extends Particle {
         return false;
     }
 
-    @SubscribeEvent
-    public static void onRenderLevelStage(RenderLevelStageEvent event) {
-        if (event.getStage() == RenderLevelStageEvent.Stage.AFTER_PARTICLES && particleBuffers != null) {
+    /** Starts each native pass, including passes moved by shader packs. */
+    public static void beginRendering() {
+        if (particleBuffers != null) {
+            particleBuffers.translucentRenders.clear();
+            particleBuffers.drawingTranslucent = false;
+            particleBuffers.hasParticles = false;
+        }
+    }
+
+    /** Flushes before ParticleEngine leaves the active shader pass and lightmap. */
+    public static void finishRendering() {
+        if (particleBuffers != null && particleBuffers.hasParticles) {
             try {
                 particleBuffers.finish();
             } finally {
+                particleBuffers.hasParticles = false;
                 RenderSystem.enableDepthTest();
                 RenderSystem.depthMask(true);
                 RenderSystem.disableBlend();
@@ -141,6 +151,7 @@ public final class WrapperParticle extends Particle {
         private final List<RenderableData> translucentRenders = new ArrayList<>();
         private final Matrix4f viewMatrix = new Matrix4f();
         private boolean drawingTranslucent;
+        private boolean hasParticles;
 
         private ParticleBuffers() {
             super(new ByteBufferBuilder(4096), new LinkedHashMap<>());
@@ -164,6 +175,9 @@ public final class WrapperParticle extends Particle {
             InterfaceRender.renderBuffer = this;
             InterfaceRender.renderingParticles = true;
             try {
+                RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
+                RenderSystem.enableDepthTest();
+                RenderSystem.depthMask(true);
                 // Draw depth-writing models before smoke and other translucent particles.
                 endBatch();
                 viewMatrix.set(RenderSystem.getModelViewMatrix());

@@ -9,7 +9,6 @@ import java.util.Map;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.BufferBuilder;
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.blaze3d.vertex.Tesselator;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.math.Matrix4f;
 import com.mojang.math.Vector4f;
@@ -24,18 +23,18 @@ import net.minecraft.client.particle.Particle;
 import net.minecraft.client.particle.ParticleRenderType;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderType;
-import net.minecraft.client.renderer.texture.TextureManager;
 import net.minecraft.world.phys.Vec3;
 
 /** Lets Minecraft own particle ticking, rendering, and lifetime limits. */
 public class WrapperParticle extends Particle {
     private static final ParticleRenderer RENDER_TYPE = new ParticleRenderer();
 
-    private static final class ParticleRenderer implements ParticleRenderType {
+    private static final class ParticleRenderer {
         private final List<RenderableData> translucentRenders = new ArrayList<>();
         private final Matrix4f viewMatrix = new Matrix4f();
         private final Vector4f renderPosition = new Vector4f();
         private boolean drawingTranslucent;
+        private boolean active;
         private final Map<RenderType, BufferBuilder> builders = new LinkedHashMap<>();
         private final MultiBufferSource.BufferSource buffers = MultiBufferSource.immediateWithBuffers(builders, new BufferBuilder(256));
         private final MultiBufferSource particleBuffers = renderType -> {
@@ -51,8 +50,11 @@ public class WrapperParticle extends Particle {
         private MultiBufferSource previousRenderBuffer;
         private boolean previouslyRenderingParticles;
 
-        @Override
-        public void begin(BufferBuilder builder, TextureManager textureManager) {
+        private void begin() {
+            if (active) {
+                return;
+            }
+            active = true;
             translucentRenders.clear();
             drawingTranslucent = false;
             previousMatrixStack = InterfaceRender.matrixStack;
@@ -62,14 +64,16 @@ public class WrapperParticle extends Particle {
             InterfaceRender.matrixStack = particleMatrixStack;
             InterfaceRender.renderBuffer = particleBuffers;
             InterfaceRender.renderingParticles = true;
-            RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
-            RenderSystem.enableDepthTest();
-            RenderSystem.depthMask(true);
         }
 
-        @Override
-        public void end(Tesselator tesselator) {
+        private void end() {
+            if (!active) {
+                return;
+            }
             try {
+                RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
+                RenderSystem.enableDepthTest();
+                RenderSystem.depthMask(true);
                 //Solid particles must fill the depth buffer before translucent particles blend over them.
                 buffers.endBatch();
                 viewMatrix.load(RenderSystem.getModelViewMatrix());
@@ -82,6 +86,7 @@ public class WrapperParticle extends Particle {
             } finally {
                 translucentRenders.clear();
                 drawingTranslucent = false;
+                active = false;
                 InterfaceRender.matrixStack = previousMatrixStack;
                 InterfaceRender.renderBuffer = previousRenderBuffer;
                 InterfaceRender.renderingParticles = previouslyRenderingParticles;
@@ -102,11 +107,11 @@ public class WrapperParticle extends Particle {
             renderPosition.transform(viewMatrix);
             return renderPosition.z();
         }
+    }
 
-        @Override
-        public String toString() {
-            return "MTS_PARTICLES";
-        }
+    /** Flush after Minecraft's translucent sheet, while the native particle pass is still active. */
+    public static void finishRender() {
+        RENDER_TYPE.end();
     }
 
     static boolean queueTranslucent(RenderableData data) {
@@ -149,6 +154,7 @@ public class WrapperParticle extends Particle {
     @Override
     public void render(VertexConsumer buffer, Camera camera, float partialTicks) {
         if (particle.isValid && Minecraft.getInstance().level == level) {
+            RENDER_TYPE.begin();
             Vec3 cameraPosition = camera.getPosition();
             transform.resetTransforms().setTranslation(particle.position.x - cameraPosition.x, particle.position.y - cameraPosition.y, particle.position.z - cameraPosition.z);
             particle.render(transform, partialTicks);
@@ -157,7 +163,8 @@ public class WrapperParticle extends Particle {
 
     @Override
     public ParticleRenderType getRenderType() {
-        return RENDER_TYPE;
+        //Shader mods recognize this sheet when splitting opaque and translucent passes.
+        return ParticleRenderType.PARTICLE_SHEET_TRANSLUCENT;
     }
 
     @Override

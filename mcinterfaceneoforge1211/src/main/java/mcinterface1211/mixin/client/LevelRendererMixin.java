@@ -75,7 +75,9 @@ public abstract class LevelRendererMixin {
 
         //The camera view is already applied at this stage.  Fabulous's preceding depth
         //copy unbinds the framebuffer; bright blending must use the main scene as its destination.
-        Minecraft.getInstance().getMainRenderTarget().bindWrite(false);
+        if (Minecraft.useShaderTransparency()) {
+            Minecraft.getInstance().getMainRenderTarget().bindWrite(false);
+        }
 
         if (ConfigSystem.settings.general.forceRenderLastSolid.value) {
             InterfaceRender.doRenderCall(false, pPartialTicks);

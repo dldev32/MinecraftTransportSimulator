@@ -24,8 +24,6 @@ import net.minecraft.client.renderer.ActiveRenderInfo;
 import net.minecraft.client.renderer.BufferBuilder;
 import net.minecraft.client.renderer.IRenderTypeBuffer;
 import net.minecraft.client.renderer.RenderType;
-import net.minecraft.client.renderer.Tessellator;
-import net.minecraft.client.renderer.texture.TextureManager;
 import net.minecraft.client.world.ClientWorld;
 import net.minecraft.util.math.vector.Vector3d;
 
@@ -35,6 +33,7 @@ public class BuilderParticle extends Particle {
     private static final FloatBuffer PARTICLE_VIEW_MATRIX = BufferUtils.createFloatBuffer(16);
     private static final List<RenderableData> TRANSLUCENT_RENDERS = new ArrayList<>();
     private static boolean drawingTranslucent;
+    private static boolean hasParticles;
     private static final Map<RenderType, BufferBuilder> PARTICLE_BUILDERS = new LinkedHashMap<>();
     private static final IRenderTypeBuffer.Impl PARTICLE_BUFFER = IRenderTypeBuffer.immediateWithBuffers(PARTICLE_BUILDERS, new BufferBuilder(256));
     private static final IRenderTypeBuffer PARTICLE_SOURCE = type -> {
@@ -44,58 +43,54 @@ public class BuilderParticle extends Particle {
         }
         return PARTICLE_BUFFER.getBuffer(type);
     };
-    private static final IParticleRenderType RENDER_TYPE = new IParticleRenderType() {
-        @Override
-        public void begin(BufferBuilder builder, TextureManager textureManager) {
-            TRANSLUCENT_RENDERS.clear();
-            drawingTranslucent = false;
+    /** Starts each native particle pass, including the separate passes used by shader mods. */
+    public static void beginRendering() {
+        TRANSLUCENT_RENDERS.clear();
+        drawingTranslucent = false;
+        hasParticles = false;
+    }
+
+    /** Flushes after the native sheet, while its camera and shader pass are still active. */
+    public static void finishRendering() {
+        if (!hasParticles) {
+            return;
+        }
+        MatrixStack previousStack = InterfaceRender.matrixStack;
+        IRenderTypeBuffer previousBuffer = InterfaceRender.renderBuffer;
+        boolean previousParticles = InterfaceRender.renderingParticles;
+        InterfaceRender.matrixStack = PARTICLE_STACK;
+        InterfaceRender.renderBuffer = PARTICLE_SOURCE;
+        InterfaceRender.renderingParticles = true;
+        try {
+            // Opaque particles must establish depth before smoke and other blended particles.
             RenderSystem.enableDepthTest();
             RenderSystem.depthMask(true);
-        }
-
-        @Override
-        public void end(Tessellator tessellator) {
-            MatrixStack previousStack = InterfaceRender.matrixStack;
-            IRenderTypeBuffer previousBuffer = InterfaceRender.renderBuffer;
-            boolean previousParticles = InterfaceRender.renderingParticles;
-            InterfaceRender.matrixStack = PARTICLE_STACK;
-            InterfaceRender.renderBuffer = PARTICLE_SOURCE;
-            InterfaceRender.renderingParticles = true;
-            try {
-                // Opaque particles must establish depth before smoke and other blended particles.
+            PARTICLE_BUFFER.endBatch();
+            if (!TRANSLUCENT_RENDERS.isEmpty()) {
+                // Minecraft has already applied the view matrix for this particle pass.
+                PARTICLE_VIEW_MATRIX.clear();
+                GL11.glGetFloatv(GL11.GL_MODELVIEW_MATRIX, PARTICLE_VIEW_MATRIX);
+                TRANSLUCENT_RENDERS.sort(Comparator.comparingDouble(BuilderParticle::getDepth));
+                drawingTranslucent = true;
+                for (RenderableData data : TRANSLUCENT_RENDERS) {
+                    data.render();
+                }
                 PARTICLE_BUFFER.endBatch();
-                if (!TRANSLUCENT_RENDERS.isEmpty()) {
-                    // Minecraft has already applied the view matrix for this particle pass.
-                    PARTICLE_VIEW_MATRIX.clear();
-                    GL11.glGetFloatv(GL11.GL_MODELVIEW_MATRIX, PARTICLE_VIEW_MATRIX);
-                    TRANSLUCENT_RENDERS.sort(Comparator.comparingDouble(BuilderParticle::getDepth));
-                    drawingTranslucent = true;
-                    for (RenderableData data : TRANSLUCENT_RENDERS) {
-                        data.render();
-                    }
-                    PARTICLE_BUFFER.endBatch();
-                }
-            } finally {
-                TRANSLUCENT_RENDERS.clear();
-                drawingTranslucent = false;
-                InterfaceRender.matrixStack = previousStack;
-                InterfaceRender.renderBuffer = previousBuffer;
-                InterfaceRender.renderingParticles = previousParticles;
-                RenderSystem.enableDepthTest();
-                RenderSystem.depthMask(true);
-                RenderSystem.disableBlend();
-                // RenderType cleanup binds the main target; later particles still need this target.
-                if (Minecraft.useShaderTransparency()) {
-                    Minecraft.getInstance().levelRenderer.getParticlesTarget().bindWrite(false);
-                }
+            }
+        } finally {
+            beginRendering();
+            InterfaceRender.matrixStack = previousStack;
+            InterfaceRender.renderBuffer = previousBuffer;
+            InterfaceRender.renderingParticles = previousParticles;
+            RenderSystem.enableDepthTest();
+            RenderSystem.depthMask(true);
+            RenderSystem.disableBlend();
+            // RenderType cleanup binds the main target; later particles still need this target.
+            if (Minecraft.useShaderTransparency()) {
+                Minecraft.getInstance().levelRenderer.getParticlesTarget().bindWrite(false);
             }
         }
-
-        @Override
-        public String toString() {
-            return "MTS_PARTICLES";
-        }
-    };
+    }
 
     static boolean queueTranslucent(RenderableData data) {
         if (!drawingTranslucent && (data.isTranslucent || data.enableBrightBlending)) {
@@ -144,7 +139,8 @@ public class BuilderParticle extends Particle {
 
     @Override
     public IParticleRenderType getRenderType() {
-        return RENDER_TYPE;
+        // Shader mods select this vanilla sheet for the translucent particle pass.
+        return IParticleRenderType.PARTICLE_SHEET_TRANSLUCENT;
     }
 
     @Override
@@ -158,6 +154,7 @@ public class BuilderParticle extends Particle {
         if (!particle.isValid || Minecraft.getInstance().level != level) {
             return;
         }
+        hasParticles = true;
         Vector3d cameraPosition = camera.getPosition();
         transform.resetTransforms().setTranslation(particle.position.x - cameraPosition.x, particle.position.y - cameraPosition.y, particle.position.z - cameraPosition.z);
         MatrixStack previousStack = InterfaceRender.matrixStack;

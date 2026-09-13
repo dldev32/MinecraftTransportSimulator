@@ -47,6 +47,7 @@ import minecrafttransportsimulator.rendering.RenderableData;
 import minecrafttransportsimulator.systems.ConfigSystem;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.renderer.GameRenderer;
 import net.minecraft.client.renderer.LightTexture;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderStateShard;
@@ -291,7 +292,7 @@ public class InterfaceRender implements IInterfaceRender {
                         .setColor(data.color.red, data.color.green, data.color.blue, data.alpha)
                         .setUv(texU, texV)
                         .setOverlay(OverlayTexture.NO_OVERLAY)
-                        .setLight(data.worldLightValue)
+                        .setLight(renderingParticles && data.lightingMode.disableWorldLighting ? LightTexture.FULL_BRIGHT : data.worldLightValue)
                         .setNormal(stackEntry, normalX, normalY, normalZ);
                 }
                 //Rewind buffer for next read.
@@ -410,8 +411,29 @@ public class InterfaceRender implements IInterfaceRender {
             //Create the state builder.  Changed states are active, default states are commented to save processing but still show the state.
             RenderType.CompositeState.CompositeStateBuilder stateBuilder = RenderType.CompositeState.builder();
 
-            //Set shader to use.
-            if (data.lightingMode.disableTextureShadows) {
+            //Shader packs replace vanilla getters and may suppress unknown MTS shaders.
+            //Resolve the getter on every draw so toggling or reloading a pack takes effect.
+            if (renderingParticles) {
+                final boolean noShadows = data.lightingMode.disableTextureShadows;
+                final boolean fullBright = data.lightingMode.disableWorldLighting;
+                final boolean translucent = data.isTranslucent || data.enableBrightBlending;
+                stateBuilder.setShaderState(new RenderStateShard.ShaderStateShard(() -> {
+                    ShaderInstance shader;
+                    if (noShadows && fullBright) {
+                        shader = translucent ? GameRenderer.getRendertypeEntityTranslucentEmissiveShader() : GameRenderer.getRendertypeEyesShader();
+                    } else if (translucent) {
+                        //Shader packs give translucent geometry its own fog and compositing pass.
+                        shader = GameRenderer.getRendertypeEntityTranslucentShader();
+                    } else {
+                        shader = noShadows ? GameRenderer.getRendertypeEnergySwirlShader() : GameRenderer.getRendertypeEntityCutoutShader();
+                    }
+                    if (shader.getClass() != ShaderInstance.class) {
+                        return shader;
+                    }
+                    //Keep the MTS lighting and alpha cutoff when vanilla owns the shader.
+                    return noShadows ? (fullBright ? entityLightsShader : entityCutoutNoshadowsShader) : (translucent ? GameRenderer.getRendertypeEntitySolidShader() : shader);
+                }));
+            } else if (data.lightingMode.disableTextureShadows) {
                 //This shouldn't use OpenGL lighting, use shader that ignores this.
                 if (data.lightingMode.disableWorldLighting) {
                     stateBuilder.setShaderState(MTS_ENTITY_LIGHTS_SHADER);

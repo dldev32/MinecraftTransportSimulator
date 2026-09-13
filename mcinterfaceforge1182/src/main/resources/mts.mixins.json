@@ -11,6 +11,7 @@
 				"client.LivingEntityRendererMixin",
 				"client.MinecraftMixin",
 				"client.MultiPackResourceManagerMixin",
+				"client.ParticleEngineMixin",
 				"client.VillagerModelMixin"
     ],
 		"mixins": [
