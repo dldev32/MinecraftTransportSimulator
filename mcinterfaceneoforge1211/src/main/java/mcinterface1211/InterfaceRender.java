@@ -103,8 +103,6 @@ public class InterfaceRender implements IInterfaceRender {
 
     private static ShaderInstance entityLightsShader;
     private static ShaderInstance entityCutoutNoshadowsShader;
-    private static final RenderStateShard.ShaderStateShard MTS_ENTITY_LIGHTS_SHADER = new RenderStateShard.ShaderStateShard(() -> entityLightsShader);
-    private static final RenderStateShard.ShaderStateShard MTS_ENTITY_CUTOUT_NOSHADOWS_SHADER = new RenderStateShard.ShaderStateShard(() -> entityCutoutNoshadowsShader);
 
     public static void onIVRegisterShadersEvent(RegisterShadersEvent event) {
         try {
@@ -233,15 +231,17 @@ public class InterfaceRender implements IInterfaceRender {
             //Rewind buffer for next read.
             data.vertexObject.vertices.rewind();
         } else {
-            String typeID = (renderingParticles ? "particle_" : "") + data.texture + data.isTranslucent + data.lightingMode + data.enableBrightBlending;
+            String typeID = (renderingGUI ? "gui_" : renderingParticles ? "particle_" : "") + data.texture + data.isTranslucent + data.lightingMode + data.enableBrightBlending;
             final RenderType renderType;
             if (data.vertexObject.cacheVertices && !renderingGUI && !renderingParticles && ConfigSystem.client.renderingSettings.renderingMode.value != 2) {
             	//Get the render type and data buffer for this entity.
                 renderType = renderTypes.computeIfAbsent(typeID, k -> CustomRenderType.create("mts_entity", DefaultVertexFormat.NEW_ENTITY, VertexFormat.Mode.TRIANGLES, 2097152, true, data.isTranslucent, CustomRenderType.createForObject(data).createCompositeState(false)));
                 BufferData bufferData = buffers.computeIfAbsent(data, k -> new BufferData(renderType, data));
             
-                //Reset buffer if it's not ready.
-                if (changedSinceLastRender) {
+                //Shader packs extend entity vertices.  Rebuild when toggling packs changes
+                //the layout, but keep the cache across main and shadow passes of one pack.
+                VertexFormat shaderFormat = getShader(data.lightingMode.disableTextureShadows, data.lightingMode.disableWorldLighting, data.isTranslucent || data.enableBrightBlending, false).getVertexFormat();
+                if (changedSinceLastRender || bufferData.shaderFormat != shaderFormat) {
                     bufferData.isReady = false;
                 }
                 if (!bufferData.isReady) {
@@ -256,11 +256,12 @@ public class InterfaceRender implements IInterfaceRender {
                         float posX = data.vertexObject.vertices.get();
                         float posY = data.vertexObject.vertices.get();
                         float posZ = data.vertexObject.vertices.get();
-                        tempBuilder.addVertex(posX, posY, posZ).setColor(data.color.red, data.color.green, data.color.blue, data.alpha).setUv(texU, texV).setOverlay(OverlayTexture.NO_OVERLAY).setLight(data.worldLightValue).setNormal(normalX, normalY, normalZ);
+                        tempBuilder.addVertex(posX, posY, posZ).setColor(data.color.red, data.color.green, data.color.blue, data.alpha).setUv(texU, texV).setOverlay(OverlayTexture.NO_OVERLAY).setLight(data.lightingMode.disableWorldLighting ? LightTexture.FULL_BRIGHT : data.worldLightValue).setNormal(normalX, normalY, normalZ);
                     }
                     bufferData.isReady = true;
                     bufferData.buffer.bind();
                     bufferData.buffer.upload(tempBuilder.buildOrThrow());
+                    bufferData.shaderFormat = shaderFormat;
                     data.vertexObject.vertices.rewind();
                     VertexBuffer.unbind();
                 }
@@ -292,7 +293,7 @@ public class InterfaceRender implements IInterfaceRender {
                         .setColor(data.color.red, data.color.green, data.color.blue, data.alpha)
                         .setUv(texU, texV)
                         .setOverlay(OverlayTexture.NO_OVERLAY)
-                        .setLight(renderingParticles && data.lightingMode.disableWorldLighting ? LightTexture.FULL_BRIGHT : data.worldLightValue)
+                        .setLight(data.lightingMode.disableWorldLighting ? LightTexture.FULL_BRIGHT : data.worldLightValue)
                         .setNormal(stackEntry, normalX, normalY, normalZ);
                 }
                 //Rewind buffer for next read.
@@ -401,6 +402,26 @@ public class InterfaceRender implements IInterfaceRender {
         }
     }
 
+    private static ShaderInstance getShader(boolean noShadows, boolean fullBright, boolean translucent, boolean gui) {
+        if (!gui) {
+            ShaderInstance shader;
+            if (noShadows && fullBright) {
+                shader = translucent ? GameRenderer.getRendertypeEntityTranslucentEmissiveShader() : GameRenderer.getRendertypeEyesShader();
+            } else if (translucent) {
+                //Shader packs give translucent geometry its own fog and compositing pass.
+                shader = GameRenderer.getRendertypeEntityTranslucentShader();
+            } else {
+                shader = noShadows ? GameRenderer.getRendertypeEnergySwirlShader() : GameRenderer.getRendertypeEntityCutoutShader();
+            }
+            //Iris/Oculus provide replacement ShaderInstance subclasses and suppress
+            //ordinary custom shaders.  Vanilla retains the MTS lighting and alpha cutoff.
+            if (shader.getClass() != ShaderInstance.class) {
+                return shader;
+            }
+        }
+        return noShadows ? (fullBright ? entityLightsShader : entityCutoutNoshadowsShader) : (translucent ? GameRenderer.getRendertypeEntitySolidShader() : GameRenderer.getRendertypeEntityCutoutShader());
+    }
+
     private static class CustomRenderType extends RenderType {
         private CustomRenderType(String name, VertexFormat fmt, Mode glMode, int size, boolean doCrumbling, boolean depthSorting, Runnable onEnable, Runnable onDisable) {
             super(name, fmt, glMode, size, doCrumbling, depthSorting, onEnable, onDisable);
@@ -411,40 +432,13 @@ public class InterfaceRender implements IInterfaceRender {
             //Create the state builder.  Changed states are active, default states are commented to save processing but still show the state.
             RenderType.CompositeState.CompositeStateBuilder stateBuilder = RenderType.CompositeState.builder();
 
-            //Shader packs replace vanilla getters and may suppress unknown MTS shaders.
-            //Resolve the getter on every draw so toggling or reloading a pack takes effect.
-            if (renderingParticles) {
-                final boolean noShadows = data.lightingMode.disableTextureShadows;
-                final boolean fullBright = data.lightingMode.disableWorldLighting;
-                final boolean translucent = data.isTranslucent || data.enableBrightBlending;
-                stateBuilder.setShaderState(new RenderStateShard.ShaderStateShard(() -> {
-                    ShaderInstance shader;
-                    if (noShadows && fullBright) {
-                        shader = translucent ? GameRenderer.getRendertypeEntityTranslucentEmissiveShader() : GameRenderer.getRendertypeEyesShader();
-                    } else if (translucent) {
-                        //Shader packs give translucent geometry its own fog and compositing pass.
-                        shader = GameRenderer.getRendertypeEntityTranslucentShader();
-                    } else {
-                        shader = noShadows ? GameRenderer.getRendertypeEnergySwirlShader() : GameRenderer.getRendertypeEntityCutoutShader();
-                    }
-                    if (shader.getClass() != ShaderInstance.class) {
-                        return shader;
-                    }
-                    //Keep the MTS lighting and alpha cutoff when vanilla owns the shader.
-                    return noShadows ? (fullBright ? entityLightsShader : entityCutoutNoshadowsShader) : (translucent ? GameRenderer.getRendertypeEntitySolidShader() : shader);
-                }));
-            } else if (data.lightingMode.disableTextureShadows) {
-                //This shouldn't use OpenGL lighting, use shader that ignores this.
-                if (data.lightingMode.disableWorldLighting) {
-                    stateBuilder.setShaderState(MTS_ENTITY_LIGHTS_SHADER);
-                } else {
-                    stateBuilder.setShaderState(MTS_ENTITY_CUTOUT_NOSHADOWS_SHADER);
-                }
-            } else if (data.isTranslucent) {
-                stateBuilder.setShaderState(RENDERTYPE_ENTITY_SOLID_SHADER);
-            } else {
-                stateBuilder.setShaderState(RENDERTYPE_ENTITY_CUTOUT_SHADER);
-            }
+            //Resolve each draw so lights, holoboxes, models and particles all follow the
+            //active shader pack.  GUI render types keep their separate vanilla shaders.
+            final boolean noShadows = data.lightingMode.disableTextureShadows;
+            final boolean fullBright = data.lightingMode.disableWorldLighting;
+            final boolean translucent = data.isTranslucent || data.enableBrightBlending;
+            final boolean gui = renderingGUI;
+            stateBuilder.setShaderState(new RenderStateShard.ShaderStateShard(() -> getShader(noShadows, fullBright, translucent, gui)));
 
             //Set transparency.
             if (data.enableBrightBlending) {
@@ -720,6 +714,7 @@ public class InterfaceRender implements IInterfaceRender {
     private static class BufferData {
         final ByteBufferBuilder byteBufferBuilder;
         final VertexBuffer buffer;
+        VertexFormat shaderFormat;
         boolean isReady;
 
         private BufferData() {
