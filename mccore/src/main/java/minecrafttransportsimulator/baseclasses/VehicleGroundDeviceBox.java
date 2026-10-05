@@ -27,6 +27,7 @@ public class VehicleGroundDeviceBox {
     private final boolean isFront;
     private final boolean isLeft;
     private boolean isLongTread;
+    private boolean disableTreadCollisionBoxMovement;
     private double treadZBestOffset;
     private float climbHeight;
     private static final Set<CollisionType> groundBoxCollisionTypes = new HashSet<>(Arrays.asList(CollisionType.BLOCK));
@@ -169,6 +170,7 @@ public class VehicleGroundDeviceBox {
         solidBox.widthRadius = 0;
         solidBox.heightRadius = 0;
         isLongTread = false;
+        disableTreadCollisionBoxMovement = false;
         for (APart groundDevice : groundDevices) {
             solidBox.localCenter.x += groundDevice.localOffset.x;
             solidBox.localCenter.z += groundDevice.localOffset.z;
@@ -179,6 +181,7 @@ public class VehicleGroundDeviceBox {
             }
             if (groundDevice.definition.ground.isTread && ((PartGroundDevice) groundDevice).getLongPartOffset() != 0) {
                 isLongTread = true;
+                disableTreadCollisionBoxMovement |= groundDevice.placementDefinition.disableTreadCollisionBoxMovement;
             }
         }
         solidBox.depthRadius = solidBox.widthRadius;
@@ -236,7 +239,7 @@ public class VehicleGroundDeviceBox {
         }
         Point3D groundCollisionOffset = vehicleMotionOffset.copy().add(PartGroundDevice.groundDetectionOffset);
         if (!groundDevices.isEmpty()) {
-            if (updateGroundDeviceTreadPosition && isLongTread) {
+            if (updateGroundDeviceTreadPosition && isLongTread && !disableTreadCollisionBoxMovement) {
                 //If we are over an air block, move the collision towards the center to account for this.
                 //Of all the places we collide, pick the one that's the most collided.
                 int treadSteps;

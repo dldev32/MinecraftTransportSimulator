@@ -54,7 +54,8 @@ public class RenderableModelObject {
     private final RenderableData flareRenderable;
     private final RenderableData beamRenderable;
     private final RenderableData coverRenderable;
-    private final List<Double[]> treadPoints;
+    private final List<TreadRoller> treadRollers;
+    private List<Double[]> treadPoints;
 
     private static final TransformationMatrix treadPathBaseTransform = new TransformationMatrix();
     private static final RotationMatrix treadRotation = new RotationMatrix();
@@ -150,10 +151,12 @@ public class RenderableModelObject {
             this.coverRenderable = null;
         }
 
-        //If we are a tread, create tread points.
+        //If we are a tread, cache rollers and create the initial tread points.
         if (entity instanceof PartGroundDevice && ((PartGroundDevice) entity).definition.ground.isTread && !((PartGroundDevice) entity).isSpare) {
-            this.treadPoints = generateTreads((PartGroundDevice) entity);
+            this.treadRollers = getTreadRollers((PartGroundDevice) entity);
+            this.treadPoints = treadRollers != null ? generateTreads((PartGroundDevice) entity, treadRollers) : null;
         } else {
+            this.treadRollers = null;
             this.treadPoints = null;
         }
 
@@ -376,6 +379,19 @@ public class RenderableModelObject {
     }
 
     private void doTreadRendering(PartGroundDevice tread, float partialTicks) {
+        //Use the same interpolated transforms as the rollers, regardless of model render order.
+        boolean pathChanged = false;
+        for (TreadRoller roller : treadRollers) {
+            AnimationSwitchbox rollerSwitchbox = tread.entityOn.animatedObjectSwitchboxes.get(roller.name);
+            if (rollerSwitchbox != null) {
+                rollerSwitchbox.runSwitchbox(partialTicks, false);
+            }
+            pathChanged |= roller.updatePosition(rollerSwitchbox != null ? rollerSwitchbox.netMatrix : null);
+        }
+        if (pathChanged) {
+            treadPoints = generateTreads(tread, treadRollers);
+        }
+
         //Render the treads along their points.
         //We manually set point 0 here due to the fact it's a joint between two differing angles.
         //We also need to translate to that point to start rendering as we're currently at 0,0,0.
@@ -479,12 +495,11 @@ public class RenderableModelObject {
         }
     }
 
-    private static <TreadEntity extends AEntityD_Definable<?>> List<Double[]> generateTreads(PartGroundDevice tread) {
-        //If we don't have the deltas, calculate them based on the points of the rollers defined in the JSON.			
-        //Search through rotatable parts on the model and grab the rollers.
-        List<RenderableVertices> parsedModel = AModelParser.parseModel(tread.entityOn.definition.getModelLocation(tread.entityOn.definition.definitions.get(0)), true);
+    private static List<TreadRoller> getTreadRollers(PartGroundDevice tread) {
+        //Read model geometry once; animated centers are updated before rendering.
+        List<RenderableVertices> parsedModel = AModelParser.parseModel(tread.entityOn.definition.getModelLocation(tread.entityOn.subDefinition), true);
         List<TreadRoller> rollers = new ArrayList<>();
-        if (tread.placementDefinition.treadPath == null) {
+        if (tread.placementDefinition.treadPath == null || tread.placementDefinition.treadPath.isEmpty()) {
             throw new IllegalArgumentException("No tread path found for part slot on " + tread.entityOn + "!");
         }
         for (String rollerName : tread.placementDefinition.treadPath) {
@@ -502,6 +517,10 @@ public class RenderableModelObject {
             }
         }
 
+        return rollers;
+    }
+
+    private static List<Double[]> generateTreads(PartGroundDevice tread, List<TreadRoller> rollers) {
         //Now that we have all the rollers, we can start calculating points.
         //First calculate the endpoints on the rollers by calling the calculation method.
         for (int i = 0; i < rollers.size(); ++i) {
@@ -515,16 +534,16 @@ public class RenderableModelObject {
         //We need to ensure the endpoints are all angle-aligned.
         //It's possible to have a start angle of -181 and end angle of
         //181, which is really just 2 degress of angle (179-181).
-        //To do this, we set the start angle of roller 1 to be 180, 
-        //or downward-facing.  From there, we add angles to align things.
-        //At the end, we should have a total angle of 540, or 180 + 360.
-        rollers.get(0).setEndAngle(180);
+        //Normalize the first tangent, then add angles to align the remaining rollers.
+        //Keep the calculated tangent so the bottom span follows moving rollers.
+        TreadRoller firstRoller = rollers.get(0);
+        firstRoller.setEndAngle(firstRoller.endAngle - 360D * Math.floor(firstRoller.endAngle / 360D));
         for (int i = 1; i < rollers.size(); ++i) {
             TreadRoller roller = rollers.get(i);
             TreadRoller priorRoller = rollers.get(i - 1);
 
             //Set the start angle to the end angle of the prior roller, then check for validity.
-            roller.startAngle = i == 1 ? 180 : priorRoller.endAngle;
+            roller.startAngle = priorRoller.endAngle;
 
             //Roller angle delta  should be within -30-330 degrees.
             //Positive angles are standard, but negative are possible for concave routing points.
@@ -547,7 +566,7 @@ public class RenderableModelObject {
             roller.setStartAngle(roller.startAngle);
             roller.setEndAngle(roller.endAngle);
         }
-        //Set the start angle to match the end angle of the last roller, rather than the 180 we set.
+        //Set the first start angle to match the end angle of the last roller.
         rollers.get(0).setStartAngle(rollers.get(rollers.size() - 1).endAngle);
 
         //Now that the endpoints are set, we can calculate the path.

@@ -1,6 +1,7 @@
 package minecrafttransportsimulator.rendering;
 
 import minecrafttransportsimulator.baseclasses.Point3D;
+import minecrafttransportsimulator.baseclasses.TransformationMatrix;
 
 /**
  * Helper class of sorts that stores a tread roller object.  Created from
@@ -9,9 +10,12 @@ import minecrafttransportsimulator.baseclasses.Point3D;
  * @author don_bruce
  */
 public class TreadRoller {
+    public final String name;
     public final Point3D centerPoint;
     public final double radius;
     public final double circumference;
+    private final Point3D initialCenterPoint;
+    private final Point3D transformedCenterPoint = new Point3D();
 
     public double startY;
     public double startZ;
@@ -22,21 +26,45 @@ public class TreadRoller {
 
     public TreadRoller(RenderableVertices object) {
         //Calculate the center and radius from the model.
+        this.name = object.name;
+        float minX = Float.POSITIVE_INFINITY;
+        float maxX = Float.NEGATIVE_INFINITY;
         float minY = 999;
         float maxY = -999;
         float minZ = 999;
         float maxZ = -999;
         for (int i = 0; i < object.vertices.capacity(); i += 8) {
+            float x = object.vertices.get(i + 5);
             float y = object.vertices.get(i + 6);
             float z = object.vertices.get(i + 7);
+            minX = Math.min(minX, x);
+            maxX = Math.max(maxX, x);
             minY = Math.min(minY, y);
             maxY = Math.max(maxY, y);
             minZ = Math.min(minZ, z);
             maxZ = Math.max(maxZ, z);
         }
-        this.centerPoint = new Point3D(0, minY + (maxY - minY) / 2D, minZ + (maxZ - minZ) / 2D);
+        this.centerPoint = new Point3D(minX + (maxX - minX) / 2D, minY + (maxY - minY) / 2D, minZ + (maxZ - minZ) / 2D);
+        this.initialCenterPoint = centerPoint.copy();
         this.radius = (maxZ - minZ) / 2D;
         this.circumference = 2 * Math.PI * radius;
+    }
+
+    /**
+     * Updates the center from the model animation, returning whether the YZ path changed.
+     * Always transform the original center so animations do not accumulate between frames.
+     */
+    public boolean updatePosition(TransformationMatrix transform) {
+        transformedCenterPoint.set(initialCenterPoint);
+        if (transform != null) {
+            transform.transform(transformedCenterPoint);
+        }
+        //Ignore rounding from rotations about the roller's own center.
+        if (Math.abs(transformedCenterPoint.y - centerPoint.y) < 1E-6 && Math.abs(transformedCenterPoint.z - centerPoint.z) < 1E-6) {
+            return false;
+        }
+        centerPoint.set(transformedCenterPoint);
+        return true;
     }
 
     /**
@@ -80,7 +108,7 @@ public class TreadRoller {
             //of the tangent line from r1 to r3t. This angle ie easy to calculate as we already
             //know what two of the lengths of the triangle are: the distance between the
             //two center points, and the radius of r3.
-            double inscribedVectorAngle = Math.asin((r2Radius - r1Radius) / centerDistance);
+            double inscribedVectorAngle = Math.asin(Math.min(1D, (r2Radius - r1Radius) / centerDistance));
 
             //Now that we have this angle, we know the angle for the line from c1 to r3t.
             //Since r3t is essentially the center of a circle with radius r1, we know that

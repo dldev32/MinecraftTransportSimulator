@@ -94,6 +94,9 @@ public class JSONPartDefinition {
     @JSONDescription("If set, this part will create an extra collision box offset in the +Z direction by this amount when placed on a vehicle.  This collision box will have all the same properties as this part (wheel, floating, friction, etc.).  Useful for treads, where the length depends on the vehicle the tread is placed on.  This parameter overrides the same-named parameter in the part JSON, if that parameter is set.")
     public float extraCollisionBoxOffset;
 
+    @JSONDescription("If true, disables automatic longitudinal movement of tread ground collision boxes toward the vehicle center when driving over gaps.  Both the normal box and the extra box from extraCollisionBoxOffset stay at their normal part positions.  If treads share a ground collision point, setting this on any of them disables movement for that point.  Defaults to false.")
+    public boolean disableTreadCollisionBoxMovement;
+
     @JSONDescription("The width of the holographic part slot box for this slot.  Does not apply to generic parts which use their defined size.")
     public float slotWidth;
 
@@ -134,7 +137,7 @@ public class JSONPartDefinition {
     @JSONDescription("A list of subNames this part can go on.  If included, this part will only be allowed to go on the specified definition sub-name variants.  Used to allow for variant-specific configurations, such as police variants of cars.")
     public List<String> validSubNames;
 
-    @JSONDescription("A list of objects on the model that define the path of the tread placed in this part slot.  The tread will start on the bottom of the first roller, and will follow the rollers as defined in this path, eventually going back to the first roller.")
+    @JSONDescription("A list of objects on the model that define the path of the tread placed in this part slot.  The tread will start on the bottom of the first roller, and will follow the rollers as defined in this path, eventually going back to the first roller.  The path follows the animated positions of these objects, including applyAfter animations.")
     public List<String> treadPath;
 
     @JSONDescription("A double-nested list of variables.  If this is set, then this part will not be interactable with unless a variable in each of the sets is true (think of variables in a set being an OR condition, and each set being AND ed together).  Additionally, should the part not exist, it will not be able to be placed.  Useful for hoods covering engines, doors covering seats, switches activating sub-parts, and trunks covering luggage.  If this part is a seat, and the player enters the seat, then all of these variables will be set to false.  Similarly, if the player exits this seat, all the variables will be set to true.  Useful for auto opening/closing of doors.")
