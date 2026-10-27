@@ -392,6 +392,7 @@
     "iteminfo.bullet.type.incendiary": "Зажигательный снаряд",
     "iteminfo.bullet.type.armor_piercing": "Бронебойный снаряд",
     "iteminfo.bullet.type.heat": "Кумулятивный снаряд",
+    "iteminfo.bullet.type.fragmentation": "Осколочный снаряд",
     "iteminfo.bullet.type.water": "Водяной снаряд",
     "iteminfo.bullet.pellets": "Дробь: ",
     "iteminfo.bullet.diameter": "Калибр (мм): ",

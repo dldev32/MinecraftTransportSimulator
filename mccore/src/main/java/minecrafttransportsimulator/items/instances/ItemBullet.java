@@ -39,6 +39,9 @@ public class ItemBullet extends AItemSubTyped<JSONBullet> {
             }
 
         }
+        if (definition.bullet.fragmentCount > 0) {
+            tooltipLines.add(LanguageSystem.ITEMINFO_BULLET_TYPE_FRAGMENTATION.getCurrentValue());
+        }
         if (definition.bullet.pellets > 0)
             tooltipLines.add(LanguageSystem.ITEMINFO_BULLET_PELLETS.getCurrentValue() + definition.bullet.pellets);
         tooltipLines.add(LanguageSystem.ITEMINFO_BULLET_DIAMETER.getCurrentValue() + definition.bullet.diameter);

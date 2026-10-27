@@ -479,6 +479,7 @@ public class LanguageSystem {
     public static final LanguageEntry ITEMINFO_BULLET_TYPE_INCENDIARY = new LanguageEntry("iteminfo.bullet.type.incendiary", "Incendiary Bullet");
     public static final LanguageEntry ITEMINFO_BULLET_TYPE_ARMOR_PIERCING = new LanguageEntry("iteminfo.bullet.type.armor_piercing", "Armor Piercing Bullet");
     public static final LanguageEntry ITEMINFO_BULLET_TYPE_HEAT = new LanguageEntry("iteminfo.bullet.type.heat", "HEAT Bullet");
+    public static final LanguageEntry ITEMINFO_BULLET_TYPE_FRAGMENTATION = new LanguageEntry("iteminfo.bullet.type.fragmentation", "Fragmentation Bullet");
     public static final LanguageEntry ITEMINFO_BULLET_TYPE_WATER = new LanguageEntry("iteminfo.bullet.type.water", "Water Bullet");
     public static final LanguageEntry ITEMINFO_BULLET_PELLETS = new LanguageEntry("iteminfo.bullet.pellets", "Pellets: ");
     public static final LanguageEntry ITEMINFO_BULLET_DIAMETER = new LanguageEntry("iteminfo.bullet.diameter", "Diameter (mm): ");
