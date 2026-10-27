@@ -9,6 +9,7 @@ import minecrafttransportsimulator.blocks.components.ABlockBase.Axis;
 import minecrafttransportsimulator.entities.instances.EntityBullet;
 import minecrafttransportsimulator.entities.instances.EntityBullet.HitType;
 import minecrafttransportsimulator.entities.instances.PartGun;
+import minecrafttransportsimulator.items.instances.ItemBullet;
 import minecrafttransportsimulator.mcinterface.AWrapperWorld;
 import minecrafttransportsimulator.packets.components.APacketBase;
 
@@ -24,8 +25,18 @@ public class PacketEntityBulletHitGeneric extends APacketBase {
     private final Point3D orientationAngles;
     private final Axis hitSide;
     private final HitType hitType;
+    private final Point3D fragmentOrigin;
+    private final ItemBullet bulletItem;
 
     public PacketEntityBulletHitGeneric(PartGun gun, int bulletNumber, Point3D position, RotationMatrix orientation, Axis hitSide, HitType hitType) {
+        this(gun, bulletNumber, position, orientation, hitSide, hitType, hitType == HitType.ARMOR ? null : hitType == HitType.BLOCK ? position.copy().add(hitSide.xOffset * 0.0001D, hitSide.yOffset * 0.0001D, hitSide.zOffset * 0.0001D) : position);
+    }
+
+    public PacketEntityBulletHitGeneric(PartGun gun, int bulletNumber, Point3D position, RotationMatrix orientation, Axis hitSide, HitType hitType, Point3D fragmentOrigin) {
+        this(gun, bulletNumber, position, orientation, hitSide, hitType, fragmentOrigin, EntityBullet.getBulletItem(gun, bulletNumber));
+    }
+
+    public PacketEntityBulletHitGeneric(PartGun gun, int bulletNumber, Point3D position, RotationMatrix orientation, Axis hitSide, HitType hitType, Point3D fragmentOrigin, ItemBullet bulletItem) {
         super(null);
         this.gunID = gun.uniqueUUID;
         this.bulletNumber = bulletNumber;
@@ -33,6 +44,8 @@ public class PacketEntityBulletHitGeneric extends APacketBase {
         this.orientationAngles = orientation.convertToAngles().copy();
         this.hitSide = hitSide;
         this.hitType = hitType;
+        this.fragmentOrigin = fragmentOrigin != null ? fragmentOrigin.copy() : null;
+        this.bulletItem = bulletItem;
     }
 
     public PacketEntityBulletHitGeneric(ByteBuf buf) {
@@ -43,6 +56,8 @@ public class PacketEntityBulletHitGeneric extends APacketBase {
         this.hitType = HitType.values()[buf.readByte()];
         this.hitSide = Axis.values()[buf.readByte()];
         this.orientationAngles = readPoint3dFromBuffer(buf);
+        this.fragmentOrigin = buf.readBoolean() ? readPoint3dFromBuffer(buf) : null;
+        this.bulletItem = readItemFromBuffer(buf);
     }
 
     @Override
@@ -54,11 +69,19 @@ public class PacketEntityBulletHitGeneric extends APacketBase {
         buf.writeByte(hitType.ordinal());
         buf.writeByte(hitSide.ordinal());
         writePoint3dToBuffer(orientationAngles, buf);
+        buf.writeBoolean(fragmentOrigin != null);
+        if (fragmentOrigin != null) {
+            writePoint3dToBuffer(fragmentOrigin, buf);
+        }
+        writeItemToBuffer(bulletItem, buf);
     }
 
     @Override
     public void handle(AWrapperWorld world) {
         RotationMatrix orientation = new RotationMatrix().setToAngles(orientationAngles);
-        EntityBullet.performGenericHitLogic(world.getBulletGun(gunID), bulletNumber, position, orientation, hitSide, hitType);
+        PartGun gun = world.getBulletGun(gunID);
+        if (gun != null && bulletItem != null) {
+            EntityBullet.performGenericHitLogic(gun, bulletNumber, position, orientation, hitSide, hitType, fragmentOrigin, bulletItem);
+        }
     }
 }

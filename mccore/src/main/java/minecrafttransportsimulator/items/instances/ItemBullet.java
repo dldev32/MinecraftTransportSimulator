@@ -24,6 +24,9 @@ public class ItemBullet extends AItemSubTyped<JSONBullet> {
                 case ARMOR_PIERCING:
                     tooltipLines.add(LanguageSystem.ITEMINFO_BULLET_TYPE_ARMOR_PIERCING.getCurrentValue());
                     break;
+                case HEAT:
+                    tooltipLines.add(LanguageSystem.ITEMINFO_BULLET_TYPE_HEAT.getCurrentValue());
+                    break;
                 case EXPLOSIVE:
                     tooltipLines.add(LanguageSystem.ITEMINFO_BULLET_TYPE_EXPLOSIVE.getCurrentValue());
                     break;

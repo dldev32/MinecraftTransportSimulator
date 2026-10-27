@@ -91,6 +91,25 @@ public class JSONParser {
         }
     };
 
+    /**
+     * Boolean fields defaulting to true must retain explicit false values during pack export.
+     */
+    public static final class DefaultTrueBooleanAdapter extends TypeAdapter<Boolean> {
+        @Override
+        public Boolean read(JsonReader reader) throws IOException {
+            return reader.nextBoolean();
+        }
+
+        @Override
+        public void write(JsonWriter writer, Boolean value) throws IOException {
+            if (value) {
+                writer.nullValue();
+            } else {
+                writer.value(false);
+            }
+        }
+    }
+
     private static final TypeAdapter<Integer> integerAdapter = new TypeAdapter<Integer>() {
         @Override
         public Integer read(JsonReader reader) throws IOException {

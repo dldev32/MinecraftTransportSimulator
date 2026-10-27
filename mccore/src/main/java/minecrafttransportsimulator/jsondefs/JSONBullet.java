@@ -2,6 +2,9 @@ package minecrafttransportsimulator.jsondefs;
 
 import java.util.List;
 
+import com.google.gson.annotations.JsonAdapter;
+
+import minecrafttransportsimulator.packloading.JSONParser.DefaultTrueBooleanAdapter;
 import minecrafttransportsimulator.packloading.JSONParser.JSONDescription;
 import minecrafttransportsimulator.packloading.JSONParser.JSONRequired;
 
@@ -29,8 +32,21 @@ public class JSONBullet extends AJSONMultiModelProvider {
         @JSONDescription("Set this to true to make this bullet not spawn, but consume ammo.")
         public boolean isBlank;
 
-        @JSONDescription("If true, then this bullet will be considered a HEAT bullet and will use the HEAT armor value on any collision boxes it finds.  If that value isn't defined, it will just use the normal armor value.")
-        public boolean isHeat;
+        @JSONDescription("If true (the default), a collision triggers the explosive or fragmentation payload even when penetration succeeds. If false, penetrating hits do not detonate or produce fragments, but the final stopping hit always does. HEAT always stops on its first collision. Proximity and timed fuzes operate independently.")
+        @JsonAdapter(DefaultTrueBooleanAdapter.class)
+        public boolean impactFuze = true;
+
+        @JSONDescription("Number of fragment rays created when the bullet detonates. Defaults to 0, disabling fragments. A stopped armor hit produces fragments behind the armor only if penetration succeeds.")
+        public int fragmentCount;
+
+        @JSONDescription("Damage dealt by each fragment ray. Uses the configured bullet damage factors, but does not inherit the bullet's armor-piercing, incendiary, or potion effects.")
+        public float fragmentDamage;
+
+        @JSONDescription("Maximum distance, in blocks, traveled by each fragment ray. Blocks and vehicle collision boxes stop fragments.")
+        public float fragmentDistance;
+
+        @JSONDescription("Maximum angle, in degrees, between a fragment ray and the bullet's direction of travel. 0 creates a straight jet, 90 a hemisphere, and 180 a sphere. Rays are distributed uniformly within this cone.")
+        public float fragmentMaxAngle;
 
         @JSONDescription("Normally, bullet checks are handled only on the client that spawned them.  This client then sends the info to the server when it sees a hit.  This works best for most bullets, since it prevents the firing player from 'missing' something they hit due to lag.  However, this prevents bullets from hitting things that aren't loaded.  Setting this to true will make the bullet do checks on the server, which will let them hit anything loaded on the server, but will result in de-syncs between hit position seen and actual hit position if the gun is moving at any significant speed when fired.")
         public boolean isLongRange;
@@ -157,6 +173,9 @@ public class JSONBullet extends AJSONMultiModelProvider {
 
         @JSONDescription("The radius (in blocks) within which full armor penetration is applied regardless of distance.")
         public float maxPenRadius;
+
+        @Deprecated
+        public boolean isHeat;
     }
 
     public enum BulletType {
@@ -166,8 +185,10 @@ public class JSONBullet extends AJSONMultiModelProvider {
         INCENDIARY,
         @JSONDescription("Like incendiary, but puts out fires rather than starts them.")
         WATER,
-        @JSONDescription("A bullet that pierces player armor.  Useful for pesky super-suits.")
+        @JSONDescription("A bullet that ignores half of the target's worn armor points. The remaining armor and its toughness still reduce damage.")
         ARMOR_PIERCING,
+        @JSONDescription("A shaped-charge bullet. Uses heatArmorThickness when defined, otherwise armorThickness. Penetration does not decrease with speed. Always stops at the first collision, even if it penetrates; damage behind armor is dealt by configured fragments.")
+        HEAT,
         @JSONDescription("A bullet that has a custom function defined in code. Useful for integration with a variety of mods, regardless of version.")
         CUSTOM
     }

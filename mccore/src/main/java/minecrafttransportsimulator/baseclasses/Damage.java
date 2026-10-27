@@ -4,6 +4,7 @@ import java.util.List;
 
 import minecrafttransportsimulator.entities.components.AEntityB_Existing;
 import minecrafttransportsimulator.entities.instances.PartGun;
+import minecrafttransportsimulator.jsondefs.JSONBullet;
 import minecrafttransportsimulator.jsondefs.JSONBullet.BulletType;
 import minecrafttransportsimulator.jsondefs.JSONPotionEffect;
 import minecrafttransportsimulator.mcinterface.IWrapperEntity;
@@ -38,6 +39,7 @@ public class Damage {
     public boolean isWater;
     public boolean isExplosion;
     public boolean ignoreArmor;
+    public double armorIgnoreFraction;
     public boolean ignoreCooldown;
     public boolean bypassesIgnoredExplosiveDamage;
     public Point3D knockback;
@@ -63,11 +65,16 @@ public class Damage {
         this.isExplosion = otherDamage.isExplosion;
         this.effects = otherDamage.effects;
         this.ignoreArmor = otherDamage.ignoreArmor;
+        this.armorIgnoreFraction = otherDamage.armorIgnoreFraction;
         this.ignoreCooldown = otherDamage.ignoreCooldown;
         this.bypassesIgnoredExplosiveDamage = otherDamage.bypassesIgnoredExplosiveDamage;
     }
 
     public Damage(PartGun gun, BoundingBox box, double amount) {
+        this(gun, gun.lastLoadedBullet.definition.bullet, box, amount);
+    }
+
+    public Damage(PartGun gun, JSONBullet.Bullet bulletDef, BoundingBox box, double amount) {
         this.amount = amount;
         this.box = box;
         this.damgeSource = gun;
@@ -75,19 +82,33 @@ public class Damage {
         this.language = entityResponsible != null ? LanguageSystem.DEATH_BULLET_PLAYER : LanguageSystem.DEATH_BULLET_NULL;
 
         ignoreCooldown = true;
-        if (gun.lastLoadedBullet.definition.bullet.types.contains(BulletType.WATER)) {
+        if (bulletDef.types.contains(BulletType.WATER)) {
             isWater = true;
         }
-        if (gun.lastLoadedBullet.definition.bullet.types.contains(BulletType.INCENDIARY)) {
+        if (bulletDef.types.contains(BulletType.INCENDIARY)) {
             isFire = true;
         }
-        if (gun.lastLoadedBullet.definition.bullet.types.contains(BulletType.ARMOR_PIERCING)) {
-            ignoreArmor = true;
+        if (bulletDef.types.contains(BulletType.ARMOR_PIERCING)) {
+            armorIgnoreFraction = 0.5D;
         }
-        if (gun.lastLoadedBullet.definition.bullet.knockback != 0) {
-            knockback = box.globalCenter.copy().subtract(gun.position).normalize().scale(gun.lastLoadedBullet.definition.bullet.knockback);
+        if (bulletDef.knockback != 0) {
+            knockback = box.globalCenter.copy().subtract(gun.position).normalize().scale(bulletDef.knockback);
         }
-        effects = gun.lastLoadedBullet.definition.bullet.effects;
+        effects = bulletDef.effects;
+    }
+
+    /**
+     * Applies the standard armor/toughness reduction using only the armor not ignored by this hit.
+     * Wrappers bypass Minecraft's armor calculation for these hits to avoid applying it twice.
+     * Enchantments and other damage reductions are still handled by Minecraft.
+     */
+    public double getAmountAfterArmor(double armor, double toughness) {
+        if (ignoreArmor || armorIgnoreFraction <= 0) {
+            return amount;
+        }
+        double effectiveArmor = Math.max(0, armor) * (1D - Math.min(armorIgnoreFraction, 0.95D));
+        double armorReduction = Math.min(20D, Math.max(effectiveArmor / 5D, effectiveArmor - amount / (2D + Math.max(0, toughness) / 4D)));
+        return amount * (1D - armorReduction / 25D);
     }
 
     /**

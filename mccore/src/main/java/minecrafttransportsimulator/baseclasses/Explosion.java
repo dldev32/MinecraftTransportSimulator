@@ -76,10 +76,14 @@ public class Explosion {
     private final float maxPenRadius;
 
     public Explosion(AWrapperWorld world, Point3D position, PartGun gun) {
+        this(world, position, gun, gun.lastLoadedBullet.definition.bullet);
+    }
+
+    public Explosion(AWrapperWorld world, Point3D position, PartGun gun, JSONBullet.Bullet bulletDef) {
         this.world = world;
         this.position = position.copy();
         this.gun = gun;
-        this.bulletDef = gun.lastLoadedBullet.definition.bullet;
+        this.bulletDef = bulletDef;
         this.entityResponsible = gun.lastController;
         this.deathLanguage = entityResponsible != null ? LanguageSystem.DEATH_EXPLOSION_PLAYER : LanguageSystem.DEATH_EXPLOSION_NULL;
         this.isIncendiary = bulletDef.types.contains(BulletType.INCENDIARY);

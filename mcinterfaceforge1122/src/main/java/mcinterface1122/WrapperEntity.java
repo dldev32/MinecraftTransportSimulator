@@ -20,6 +20,7 @@ import net.minecraft.entity.Entity;
 import net.minecraft.entity.EntityList;
 import net.minecraft.entity.EntityLiving;
 import net.minecraft.entity.EntityLivingBase;
+import net.minecraft.entity.SharedMonsterAttributes;
 import net.minecraft.entity.passive.EntityAnimal;
 import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.item.ItemLead;
@@ -434,7 +435,7 @@ public class WrapperEntity implements IWrapperEntity {
         if (damage.isExplosion) {
             newSource.setExplosion();
         }
-        if (damage.ignoreArmor) {
+        if (damage.ignoreArmor || damage.armorIgnoreFraction > 0) {
             newSource.setDamageBypassesArmor();
         }
         if (damage.ignoreCooldown && entity instanceof EntityLivingBase) {
@@ -443,7 +444,8 @@ public class WrapperEntity implements IWrapperEntity {
         if (ConfigSystem.settings.damage.creativePlayerDamage.value) {
             newSource.setDamageAllowedInCreativeMode();
         }
-        entity.attackEntityFrom(newSource, (float) damage.amount);
+        double amount = entity instanceof EntityLivingBase ? damage.getAmountAfterArmor(((EntityLivingBase) entity).getTotalArmorValue(), ((EntityLivingBase) entity).getEntityAttribute(SharedMonsterAttributes.ARMOR_TOUGHNESS).getAttributeValue()) : damage.amount;
+        entity.attackEntityFrom(newSource, (float) amount);
 
         if (damage.effects != null) {
             damage.effects.forEach(effect -> addPotionEffect(effect));

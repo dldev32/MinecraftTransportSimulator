@@ -31,6 +31,7 @@ import net.minecraft.world.damagesource.DamageTypes;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.animal.Animal;
 import net.minecraft.world.entity.npc.Villager;
@@ -433,7 +434,7 @@ public class WrapperEntity implements IWrapperEntity {
         if (damage.isExplosion) {
             damageTags.add(DamageTypeTags.IS_EXPLOSION);
         }
-        if (damage.ignoreArmor) {
+        if (damage.ignoreArmor || damage.armorIgnoreFraction > 0) {
             damageTags.add(DamageTypeTags.BYPASSES_ARMOR);
         }
         if (ConfigSystem.settings.damage.creativePlayerDamage.value) {
@@ -441,6 +442,11 @@ public class WrapperEntity implements IWrapperEntity {
         }
         Holder<DamageType> damageHolder = entity.level().registryAccess().registryOrThrow(Registries.DAMAGE_TYPE).getHolder(DamageTypes.GENERIC).get();
         DamageSource newSource = new DamageSource(damageHolder, damage.entityResponsible != null ? ((WrapperEntity) damage.entityResponsible).entity : null) {
+            @Override
+            public boolean is(TagKey<DamageType> tag) {
+                return damageTags.contains(tag) || super.is(tag);
+            }
+
             @Override
             public Component getLocalizedDeathMessage(LivingEntity player) {
                 if (damage.entityResponsible != null) {
@@ -464,7 +470,8 @@ public class WrapperEntity implements IWrapperEntity {
         if (damage.ignoreCooldown && entity instanceof LivingEntity) {
             entity.invulnerableTime = 0;
         }
-        entity.hurt(newSource, (float) damage.amount);
+        double amount = entity instanceof LivingEntity ? damage.getAmountAfterArmor(((LivingEntity) entity).getArmorValue(), ((LivingEntity) entity).getAttributeValue(Attributes.ARMOR_TOUGHNESS)) : damage.amount;
+        entity.hurt(newSource, (float) amount);
 
         if (damage.effects != null) {
             damage.effects.forEach(effect -> addPotionEffect(effect));

@@ -31,6 +31,7 @@ import minecrafttransportsimulator.items.components.AItemSubTyped;
 import minecrafttransportsimulator.items.instances.ItemItem;
 import minecrafttransportsimulator.jsondefs.AJSONPartProvider;
 import minecrafttransportsimulator.jsondefs.JSONAnimationDefinition;
+import minecrafttransportsimulator.jsondefs.JSONBullet.BulletType;
 import minecrafttransportsimulator.jsondefs.JSONCollisionGroup.CollisionType;
 import minecrafttransportsimulator.jsondefs.JSONItem.ItemComponentType;
 import minecrafttransportsimulator.jsondefs.JSONPartDefinition;
@@ -42,7 +43,6 @@ import minecrafttransportsimulator.mcinterface.IWrapperPlayer;
 import minecrafttransportsimulator.mcinterface.InterfaceManager;
 import minecrafttransportsimulator.packets.instances.PacketEntityBulletHitCollision;
 import minecrafttransportsimulator.packets.instances.PacketEntityBulletHitEntity;
-import minecrafttransportsimulator.packets.instances.PacketEntityBulletHitGeneric;
 import minecrafttransportsimulator.packets.instances.PacketPartChange_Add;
 import minecrafttransportsimulator.packets.instances.PacketPartChange_Remove;
 import minecrafttransportsimulator.packets.instances.PacketPlayerChatMessage;
@@ -334,6 +334,7 @@ public abstract class AEntityF_Multipart<JSONDefinition extends AJSONPartProvide
         for (BoundingBoxHitResult hitEntry : hitBoxes) {
             APart hitPart = getPartWithBox(hitEntry.box);
             AEntityF_Multipart<?> hitEntity = hitPart != null ? hitPart : this;
+            boolean stopOnImpact = bullet != null && bullet.shouldStopOnImpact();
 
             //First check if we need to reduce health of the hitbox.
             boolean hitOperationalHitbox = false;
@@ -358,21 +359,15 @@ public abstract class AEntityF_Multipart<JSONDefinition extends AJSONPartProvide
             if (hitEntry.box.groupDef != null && (hitEntry.box.groupDef.armorThickness != 0 || hitEntry.box.groupDef.heatArmorThickness != 0)) {
                 hitOperationalHitbox = true;
                 if (bullet != null) {
-                    double armorThickness = hitEntry.box.definition != null ? (bullet.definition.bullet.isHeat && hitEntry.box.groupDef.heatArmorThickness != 0 ? hitEntry.box.groupDef.heatArmorThickness : hitEntry.box.groupDef.armorThickness) : 0;
-                    double penetrationPotential = bullet.definition.bullet.isHeat ? bullet.definition.bullet.armorPenetration : (bullet.definition.bullet.armorPenetration * bullet.velocity / bullet.initialVelocity);
+                    double armorThickness = bullet.definition.bullet.types.contains(BulletType.HEAT) && hitEntry.box.groupDef.heatArmorThickness != 0 ? hitEntry.box.groupDef.heatArmorThickness : hitEntry.box.groupDef.armorThickness;
+                    double penetrationPotential = bullet.getArmorPenetration();
                     bullet.armorPenetrated += armorThickness;
                     bullet.displayDebugMessage("HIT ARMOR OF: " + (int) armorThickness);
 
                     if (bullet.armorPenetrated > penetrationPotential) {
                         //Bullet hit too much armor.
-                        if (world.isClient()) {
-                            InterfaceManager.packetInterface.sendToServer(new PacketEntityBulletHitGeneric(bullet.gun, bullet.bulletNumber, hitEntry.position, bullet.orientation, hitEntry.side, HitType.ARMOR));
-                            bullet.waitingOnActionPacket = true;
-                        } else {
-                            EntityBullet.performGenericHitLogic(bullet.gun, bullet.bulletNumber, hitEntry.position, bullet.orientation, hitEntry.side, HitType.ARMOR);
-                        }
                         bullet.displayDebugMessage("HIT TOO MUCH ARMOR.  MAX PEN: " + (int) penetrationPotential);
-                        return EntityBullet.HitType.ARMOR;
+                        return bullet.stopAtCollision(hitEntry, HitType.ARMOR, false);
                     }
                 } else {
                     //Not a bullet, but hit armor, 100% stopping power with no damage.
@@ -387,7 +382,7 @@ public abstract class AEntityF_Multipart<JSONDefinition extends AJSONPartProvide
                     //Didn't hit health or armor, must have hit something we can damage.
                     //Need to re-create damage object to reference this hitbox.
                     //Remove bullet if we are applying damage to a core group, or a part that forwards damage.
-                    boolean removeAfterDamage = hitPart == null || hitPart.definition.generic.forwardsDamageMultiplier > 0 || hitForwardingHitbox;
+                    boolean removeAfterDamage = stopOnImpact || hitPart == null || hitPart.definition.generic.forwardsDamageMultiplier > 0 || hitForwardingHitbox;
                     double actualDamage = damage.amount;
                     if (hitEntry.box.groupDef != null && hitEntry.box.groupDef.damageMultiplier != 0) {
                         actualDamage *= hitEntry.box.groupDef.damageMultiplier;
@@ -398,21 +393,18 @@ public abstract class AEntityF_Multipart<JSONDefinition extends AJSONPartProvide
                     if (hitForwardingHitbox) {
                         actualDamage *= hitEntry.box.groupDef.forwardsDamageMultiplier;
                     }
-                    damage = new Damage(bullet.gun, hitEntry.box, actualDamage);
+                    damage = new Damage(bullet.gun, bullet.definition.bullet, hitEntry.box, actualDamage);
 
                     bullet.displayDebugMessage("HIT ENTITY BOX FOR DAMAGE: " + (int) damage.amount + " DAMAGE WAS AT " + (int) hitEntity.damageVar.currentValue);
                     if (world.isClient()) {
-                        InterfaceManager.packetInterface.sendToServer(new PacketEntityBulletHitEntity(bullet.gun, hitEntity, damage));
+                        InterfaceManager.packetInterface.sendToServer(new PacketEntityBulletHitEntity(bullet, hitEntity, damage));
                         if (removeAfterDamage) {
-                            InterfaceManager.packetInterface.sendToServer(new PacketEntityBulletHitGeneric(bullet.gun, bullet.bulletNumber, hitEntry.position, bullet.orientation, hitEntry.side, HitType.VEHICLE));
-                            bullet.waitingOnActionPacket = true;
-                            return EntityBullet.HitType.VEHICLE;
+                            return bullet.stopAtCollision(hitEntry, HitType.VEHICLE, true);
                         }
                     } else {
                         EntityBullet.performEntityHitLogic(hitEntity, damage);
                         if (removeAfterDamage) {
-                            EntityBullet.performGenericHitLogic(bullet.gun, bullet.bulletNumber, hitEntry.position, bullet.orientation, hitEntry.side, HitType.VEHICLE);
-                            return EntityBullet.HitType.VEHICLE;
+                            return bullet.stopAtCollision(hitEntry, HitType.VEHICLE, true);
                         }
                     }
                 } else {
@@ -421,6 +413,9 @@ public abstract class AEntityF_Multipart<JSONDefinition extends AJSONPartProvide
                     hitEntity.attack(damage);
                     return EntityBullet.HitType.VEHICLE;
                 }
+            }
+            if (stopOnImpact) {
+                return bullet.stopAtCollision(hitEntry, hitEntry.box.groupDef != null && (hitEntry.box.groupDef.armorThickness != 0 || hitEntry.box.groupDef.heatArmorThickness != 0) ? HitType.ARMOR : HitType.VEHICLE, true);
             }
         }
         return null;

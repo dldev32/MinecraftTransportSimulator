@@ -1993,6 +1993,14 @@ public final class LegacyCompatSystem {
     }
 
     private static void performBulletLegacyCompats(JSONBullet definition) {
+        //Move the old HEAT flag into the bullet type list.
+        if (definition.bullet.isHeat) {
+            if (!definition.bullet.types.contains(JSONBullet.BulletType.HEAT)) {
+                definition.bullet.types.add(JSONBullet.BulletType.HEAT);
+            }
+            definition.bullet.isHeat = false;
+        }
+
         //If we are a bullet without a definition, add one so we don't crash on other systems.
         if (definition.definitions == null) {
             definition.definitions = new ArrayList<>();

@@ -18,6 +18,7 @@ import minecrafttransportsimulator.mcinterface.IWrapperPlayer;
 import minecrafttransportsimulator.systems.ConfigSystem;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.LivingEntity;
+import net.minecraft.entity.ai.attributes.Attributes;
 import net.minecraft.entity.MobEntity;
 import net.minecraft.entity.merchant.villager.VillagerEntity;
 import net.minecraft.entity.passive.AnimalEntity;
@@ -440,7 +441,7 @@ public class WrapperEntity implements IWrapperEntity {
         if (damage.isExplosion) {
             newSource.setExplosion();
         }
-        if (damage.ignoreArmor) {
+        if (damage.ignoreArmor || damage.armorIgnoreFraction > 0) {
             newSource.bypassArmor();
         }
         if (damage.ignoreCooldown && entity instanceof LivingEntity) {
@@ -449,7 +450,8 @@ public class WrapperEntity implements IWrapperEntity {
         if (ConfigSystem.settings.damage.creativePlayerDamage.value) {
             newSource.bypassInvul();
         }
-        entity.hurt(newSource, (float) damage.amount);
+        double amount = entity instanceof LivingEntity ? damage.getAmountAfterArmor(((LivingEntity) entity).getArmorValue(), ((LivingEntity) entity).getAttributeValue(Attributes.ARMOR_TOUGHNESS)) : damage.amount;
+        entity.hurt(newSource, (float) amount);
 
         if (damage.effects != null) {
             damage.effects.forEach(effect -> addPotionEffect(effect));

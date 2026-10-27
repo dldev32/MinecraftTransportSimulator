@@ -6,6 +6,7 @@ import io.netty.buffer.ByteBuf;
 import minecrafttransportsimulator.baseclasses.Damage;
 import minecrafttransportsimulator.entities.instances.EntityBullet;
 import minecrafttransportsimulator.entities.instances.PartGun;
+import minecrafttransportsimulator.items.instances.ItemBullet;
 import minecrafttransportsimulator.mcinterface.AWrapperWorld;
 import minecrafttransportsimulator.mcinterface.IWrapperEntity;
 import minecrafttransportsimulator.packets.components.APacketBase;
@@ -20,12 +21,14 @@ public class PacketEntityBulletHitExternalEntity extends APacketBase {
     private final UUID gunID;
     private final UUID entityID;
     private final double amount;
+    private final ItemBullet bulletItem;
 
-    public PacketEntityBulletHitExternalEntity(IWrapperEntity entity, Damage damage) {
+    public PacketEntityBulletHitExternalEntity(EntityBullet bullet, IWrapperEntity entity, Damage damage) {
         super(null);
         this.gunID = damage.damgeSource.uniqueUUID;
         this.entityID = entity.getID();
         this.amount = damage.amount;
+        this.bulletItem = (ItemBullet) bullet.cachedItem;
     }
 
     public PacketEntityBulletHitExternalEntity(ByteBuf buf) {
@@ -33,6 +36,7 @@ public class PacketEntityBulletHitExternalEntity extends APacketBase {
         this.gunID = readUUIDFromBuffer(buf);
         this.entityID = readUUIDFromBuffer(buf);
         this.amount = buf.readDouble();
+        this.bulletItem = readItemFromBuffer(buf);
     }
 
     @Override
@@ -41,14 +45,15 @@ public class PacketEntityBulletHitExternalEntity extends APacketBase {
         writeUUIDToBuffer(gunID, buf);
         writeUUIDToBuffer(entityID, buf);
         buf.writeDouble(amount);
+        writeItemToBuffer(bulletItem, buf);
     }
 
     @Override
     public void handle(AWrapperWorld world) {
         PartGun gun = world.getBulletGun(gunID);
         IWrapperEntity entity = world.getExternalEntity(entityID);
-        if (entity != null) {
-            EntityBullet.performExternalEntityHitLogic(entity, new Damage(gun, entity.getBounds(), amount));
+        if (entity != null && gun != null && bulletItem != null) {
+            EntityBullet.performExternalEntityHitLogic(entity, new Damage(gun, bulletItem.definition.bullet, entity.getBounds(), amount));
         }
     }
 }

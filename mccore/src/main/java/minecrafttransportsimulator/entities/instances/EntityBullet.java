@@ -11,6 +11,7 @@ import minecrafttransportsimulator.baseclasses.BoundingBoxHitResult;
 import minecrafttransportsimulator.baseclasses.ComputedVariable;
 import minecrafttransportsimulator.baseclasses.Damage;
 import minecrafttransportsimulator.baseclasses.Explosion;
+import minecrafttransportsimulator.baseclasses.Fragmentation;
 import minecrafttransportsimulator.baseclasses.Point3D;
 import minecrafttransportsimulator.baseclasses.RotationMatrix;
 import minecrafttransportsimulator.blocks.components.ABlockBase.Axis;
@@ -321,8 +322,8 @@ public class EntityBullet extends AEntityD_Definable<JSONBullet> {
             if (((definition.bullet.isLongRange || !(gun.lastController instanceof IWrapperPlayer)) ^ world.isClient()) && (!world.isClient() || InterfaceManager.clientInterface.getClientPlayer().getID().equals(gun.lastController.getID()))) {
                 //Now that we have an accurate motion, check for collisions.
                 //First get a damage object to try to attack entities with.
-                double amount = definition.bullet.isHeat ? definition.bullet.damage : (velocity / initialVelocity) * definition.bullet.damage * ConfigSystem.settings.damage.bulletDamageFactor.value * ConfigSystem.settings.damage.packBulletDamageFactors.value.get(gun.lastLoadedBullet.definition.packID);
-                Damage damage = new Damage(gun, boundingBox, amount);
+                double amount = (definition.bullet.types.contains(BulletType.HEAT) || initialVelocity == 0 ? 1D : velocity / initialVelocity) * definition.bullet.damage * ConfigSystem.settings.damage.bulletDamageFactor.value * ConfigSystem.settings.damage.packBulletDamageFactors.value.get(definition.packID);
+                Damage damage = new Damage(gun, definition.bullet, boundingBox, amount);
 
                 //Declare variables that may be used for hit logic.
                 AEntityF_Multipart<?> hitMultipart = null;
@@ -424,12 +425,12 @@ public class EntityBullet extends AEntityD_Definable<JSONBullet> {
                 //Now attack the block or external entity, if we have either.
                 if (hitExternalEntity != null) {
                     if (world.isClient()) {
-                        InterfaceManager.packetInterface.sendToServer(new PacketEntityBulletHitExternalEntity(hitExternalEntity, damage));
-                        InterfaceManager.packetInterface.sendToServer(new PacketEntityBulletHitGeneric(gun, bulletNumber, hitExternalEntityPosition, orientation, Axis.getFromVector(motion), HitType.ENTITY));
+                        InterfaceManager.packetInterface.sendToServer(new PacketEntityBulletHitExternalEntity(this, hitExternalEntity, damage));
+                        InterfaceManager.packetInterface.sendToServer(new PacketEntityBulletHitGeneric(gun, bulletNumber, hitExternalEntityPosition, getImpactOrientation(), Axis.getFromVector(motion), HitType.ENTITY));
                         waitingOnActionPacket = true;
                     } else {
                         performExternalEntityHitLogic(hitExternalEntity, damage);
-                        performGenericHitLogic(gun, bulletNumber, hitExternalEntityPosition, orientation, Axis.getFromVector(motion), HitType.ENTITY);
+                        performGenericHitLogic(gun, bulletNumber, hitExternalEntityPosition, getImpactOrientation(), Axis.getFromVector(motion), HitType.ENTITY);
                     }
                     displayDebugMessage("HIT MC ENTITY " + hitExternalEntity.getName());
                     return;
@@ -448,10 +449,10 @@ public class EntityBullet extends AEntityD_Definable<JSONBullet> {
                         hitBlock.hitPosition.z -= 0.000001;
                     }
                     if (world.isClient()) {
-                        InterfaceManager.packetInterface.sendToServer(new PacketEntityBulletHitGeneric(gun, bulletNumber, hitBlock.hitPosition, orientation, hitBlock.side, HitType.BLOCK));
+                        InterfaceManager.packetInterface.sendToServer(new PacketEntityBulletHitGeneric(gun, bulletNumber, hitBlock.hitPosition, getImpactOrientation(), hitBlock.side, HitType.BLOCK));
                         waitingOnActionPacket = true;
                     } else {
-                        performGenericHitLogic(gun, bulletNumber, hitBlock.hitPosition, orientation, hitBlock.side, HitType.BLOCK);
+                        performGenericHitLogic(gun, bulletNumber, hitBlock.hitPosition, getImpactOrientation(), hitBlock.side, HitType.BLOCK);
                     }
                     displayDebugMessage("HIT BLOCK AT " + hitBlock.blockPosition + " WITH ACTUAL POSITION " + hitBlock.hitPosition);
                     return;
@@ -531,10 +532,10 @@ public class EntityBullet extends AEntityD_Definable<JSONBullet> {
                             position.interpolate(targetToHit, (distanceToTarget - definition.bullet.proximityFuze) / definition.bullet.proximityFuze);
                         }
                         if (world.isClient()) {
-                            InterfaceManager.packetInterface.sendToServer(new PacketEntityBulletHitGeneric(gun, bulletNumber, position, orientation, Axis.getFromVector(motion), hitType));
+                            InterfaceManager.packetInterface.sendToServer(new PacketEntityBulletHitGeneric(gun, bulletNumber, position, getImpactOrientation(), Axis.getFromVector(motion), hitType));
                             waitingOnActionPacket = true;
                         } else {
-                            performGenericHitLogic(gun, bulletNumber, position, orientation, Axis.getFromVector(motion), hitType);
+                            performGenericHitLogic(gun, bulletNumber, position, getImpactOrientation(), Axis.getFromVector(motion), hitType);
                         }
                         return;
                     }
@@ -544,10 +545,10 @@ public class EntityBullet extends AEntityD_Definable<JSONBullet> {
                 if (definition.bullet.airBurstDelay != 0) {
                     if (ticksExisted > definition.bullet.airBurstDelay) {
                         if (world.isClient()) {
-                            InterfaceManager.packetInterface.sendToServer(new PacketEntityBulletHitGeneric(gun, bulletNumber, position, orientation, Axis.NONE, HitType.BURST));
+                            InterfaceManager.packetInterface.sendToServer(new PacketEntityBulletHitGeneric(gun, bulletNumber, position, getImpactOrientation(), Axis.NONE, HitType.BURST));
                             waitingOnActionPacket = true;
                         } else {
-                            performGenericHitLogic(gun, bulletNumber, position, orientation, Axis.NONE, HitType.BURST);
+                            performGenericHitLogic(gun, bulletNumber, position, getImpactOrientation(), Axis.NONE, HitType.BURST);
                         }
                         displayDebugMessage("BURST");
                         return;
@@ -599,6 +600,50 @@ public class EntityBullet extends AEntityD_Definable<JSONBullet> {
         }
     }
 
+    /**
+     * Solid bullets retain their normal penetration behavior. An impact fuze stops a payload on
+     * the first collision, while HEAT always stops, including when the impact fuze is disabled.
+     */
+    public boolean shouldStopOnImpact() {
+        return definition.bullet.types.contains(BulletType.HEAT) || (definition.bullet.impactFuze && (definition.bullet.types.contains(BulletType.EXPLOSIVE) || definition.bullet.fragmentCount > 0));
+    }
+
+    public double getArmorPenetration() {
+        return definition.bullet.armorPenetration * (definition.bullet.types.contains(BulletType.HEAT) || initialVelocity == 0 ? 1D : velocity / initialVelocity);
+    }
+
+    private RotationMatrix getImpactOrientation() {
+        return motion.length() > 0 ? new RotationMatrix().setToVector(motion, true) : orientation;
+    }
+
+    /**
+     * Stops at a vehicle collision. Only a penetrated hit can create fragments behind its armor.
+     * The fragment origin is sent to the server because most bullets only exist on the client.
+     */
+    public HitType stopAtCollision(BoundingBoxHitResult hit, HitType hitType, boolean penetrated) {
+        Point3D direction = motion.copy().normalize();
+        RotationMatrix impactOrientation = getImpactOrientation();
+        Point3D fragmentOrigin = null;
+        if (penetrated) {
+            fragmentOrigin = hit.position.copy().addScaled(direction, 0.0001D);
+            if (hit.box.groupDef != null && (hit.box.groupDef.armorThickness > 0 || hit.box.groupDef.heatArmorThickness > 0)) {
+                //Start behind this plate, so fragments do not hit the plate that was just penetrated.
+                double boxDiameter = 2D * (hit.box.widthRadius + hit.box.heightRadius + hit.box.depthRadius) + 1D;
+                BoundingBoxHitResult exit = hit.box.getIntersection(fragmentOrigin, hit.position.copy().addScaled(direction, boxDiameter));
+                if (exit != null) {
+                    fragmentOrigin = exit.position.copy().addScaled(direction, 0.0001D);
+                }
+            }
+        }
+        if (world.isClient()) {
+            InterfaceManager.packetInterface.sendToServer(new PacketEntityBulletHitGeneric(gun, bulletNumber, hit.position, impactOrientation, hit.side, hitType, fragmentOrigin, (ItemBullet) cachedItem));
+            waitingOnActionPacket = true;
+        } else {
+            performGenericHitLogic(gun, bulletNumber, hit.position, impactOrientation, hit.side, hitType, fragmentOrigin, (ItemBullet) cachedItem);
+        }
+        return hitType;
+    }
+
     public static void performEntityHitLogic(AEntityE_Interactable<?> entity, Damage damage) {
         if (!entity.world.isClient()) {
             entity.attack(damage);
@@ -641,51 +686,73 @@ public class EntityBullet extends AEntityD_Definable<JSONBullet> {
         }
     }
 
+    public static ItemBullet getBulletItem(PartGun gun, int bulletNumber) {
+        EntityBullet bullet = gun.world.getBullet(gun.uniqueUUID, bulletNumber);
+        return bullet != null ? (ItemBullet) bullet.cachedItem : gun.lastLoadedBullet;
+    }
+
     public static void performGenericHitLogic(PartGun gun, int bulletNumber, Point3D position, Axis hitSide, HitType hitType) {
         EntityBullet bullet = gun.world.getBullet(gun.uniqueUUID, bulletNumber);
         performGenericHitLogic(gun, bulletNumber, position, bullet != null ? bullet.orientation : new RotationMatrix(), hitSide, hitType);
     }
 
     public static void performGenericHitLogic(PartGun gun, int bulletNumber, Point3D position, RotationMatrix orientation, Axis hitSide, HitType hitType) {
+        Point3D fragmentOrigin = hitType == HitType.ARMOR ? null : position;
+        if (hitType == HitType.BLOCK) {
+            fragmentOrigin = position.copy().add(hitSide.xOffset * 0.0001D, hitSide.yOffset * 0.0001D, hitSide.zOffset * 0.0001D);
+        }
+        performGenericHitLogic(gun, bulletNumber, position, orientation, hitSide, hitType, fragmentOrigin);
+    }
+
+    public static void performGenericHitLogic(PartGun gun, int bulletNumber, Point3D position, RotationMatrix orientation, Axis hitSide, HitType hitType, Point3D fragmentOrigin) {
+        performGenericHitLogic(gun, bulletNumber, position, orientation, hitSide, hitType, fragmentOrigin, getBulletItem(gun, bulletNumber));
+    }
+
+    public static void performGenericHitLogic(PartGun gun, int bulletNumber, Point3D position, RotationMatrix orientation, Axis hitSide, HitType hitType, Point3D fragmentOrigin, ItemBullet bulletItem) {
         //Query up return packets first.  This ensures that we get to do this generic logic which spawns particles on clients before
         //any block-breaking packets arrive.
         EntityBullet bullet = gun.world.getBullet(gun.uniqueUUID, bulletNumber);
         if (!gun.world.isClient()) {
-            InterfaceManager.packetInterface.sendToAllClients(new PacketEntityBulletHitGeneric(gun, bulletNumber, position, orientation, hitSide, hitType));
+            InterfaceManager.packetInterface.sendToAllClients(new PacketEntityBulletHitGeneric(gun, bulletNumber, position, orientation, hitSide, hitType, fragmentOrigin, bulletItem));
+        }
+
+        //Fragments use the intact collision geometry, before an explosion can destroy it.
+        if (!gun.world.isClient() && fragmentOrigin != null && ConfigSystem.settings.damage.bulletExplosions.value) {
+            new Fragmentation(gun, bulletItem.definition, fragmentOrigin, orientation).spawnFragments();
         }
 
         //Spawn an explosion if we are an explosive bullet on the server.
         if (!gun.world.isClient() && ConfigSystem.settings.damage.bulletExplosions.value) {
-            if (gun.lastLoadedBullet.definition.bullet.types.contains(BulletType.EXPLOSIVE)) {
+            if (bulletItem.definition.bullet.types.contains(BulletType.EXPLOSIVE)) {
                 Point3D explosionPosition = position.copy();
                 if (hitType == HitType.BLOCK) {
                     explosionPosition.add(hitSide.xOffset, hitSide.yOffset, hitSide.zOffset);
                 }
-                double cameraShakeBlastStrength = gun.lastLoadedBullet.definition.bullet.blastStrength;
-                if (gun.lastLoadedBullet.definition.bullet.blastDamage == 0 && cameraShakeBlastStrength == 0) {
-                    cameraShakeBlastStrength = gun.lastLoadedBullet.definition.bullet.diameter / 10F;
+                double cameraShakeBlastStrength = bulletItem.definition.bullet.blastStrength;
+                if (bulletItem.definition.bullet.blastDamage == 0 && cameraShakeBlastStrength == 0) {
+                    cameraShakeBlastStrength = bulletItem.definition.bullet.diameter / 10F;
                 }
-                JSONCameraShake cameraShakeParams = gun.lastLoadedBullet.definition.bullet.cameraShakeParams;
-                double cameraShakeStrength = cameraShakeParams != null && cameraShakeParams.strength != null ? cameraShakeParams.strength : (gun.lastLoadedBullet.definition.bullet.blastDamage + cameraShakeBlastStrength) / 2D;
+                JSONCameraShake cameraShakeParams = bulletItem.definition.bullet.cameraShakeParams;
+                double cameraShakeStrength = cameraShakeParams != null && cameraShakeParams.strength != null ? cameraShakeParams.strength : (bulletItem.definition.bullet.blastDamage + cameraShakeBlastStrength) / 2D;
                 CameraSystem.sendExplosionCameraShake(gun.world, explosionPosition, cameraShakeStrength, cameraShakeParams != null ? cameraShakeParams.radius : 0, cameraShakeParams != null ? cameraShakeParams.duration : 0, cameraShakeParams != null ? cameraShakeParams.intensity : 1);
-                if (gun.lastLoadedBullet.definition.bullet.blastDamage != 0) {
+                if (bulletItem.definition.bullet.blastDamage != 0) {
                     //Use custom explosion system with elliptical radii and per-target-type damage.
-                    new Explosion(gun.world, explosionPosition, gun).doExplosion();
+                    new Explosion(gun.world, explosionPosition, gun, bulletItem.definition.bullet).doExplosion();
                 } else {
                     //Backward compat: old bullets without blastDamage use vanilla explosion.
-                    float blastSize = gun.lastLoadedBullet.definition.bullet.blastStrength == 0 ? gun.lastLoadedBullet.definition.bullet.diameter / 10F : gun.lastLoadedBullet.definition.bullet.blastStrength;
-                    gun.world.spawnExplosion(explosionPosition, blastSize, gun.lastLoadedBullet.definition.bullet.types.contains(BulletType.INCENDIARY) && ConfigSystem.settings.damage.bulletBlockBreaking.value, ConfigSystem.settings.damage.bulletBlockBreaking.value);
+                    float blastSize = bulletItem.definition.bullet.blastStrength == 0 ? bulletItem.definition.bullet.diameter / 10F : bulletItem.definition.bullet.blastStrength;
+                    gun.world.spawnExplosion(explosionPosition, blastSize, bulletItem.definition.bullet.types.contains(BulletType.INCENDIARY) && ConfigSystem.settings.damage.bulletBlockBreaking.value, ConfigSystem.settings.damage.bulletBlockBreaking.value);
                 }
                 if (bullet != null) {
                     bullet.displayDebugMessage("SPAWNING EXPLOSION AT " + explosionPosition);
                 }
             }
 
-            if (gun.lastLoadedBullet.definition.bullet.types.contains(BulletType.CUSTOM)) {
-                List<String> functions = gun.lastLoadedBullet.definition.bullet.customHitFunctions;
+            if (bulletItem.definition.bullet.types.contains(BulletType.CUSTOM)) {
+                List<String> functions = bulletItem.definition.bullet.customHitFunctions;
                 for (String function : functions) {
                     if (CUSTOM_HIT_FUNCTIONS.containsKey(function))
-                        CUSTOM_HIT_FUNCTIONS.get(function).execute(gun.world, position, hitSide, hitType, gun.lastLoadedBullet);
+                        CUSTOM_HIT_FUNCTIONS.get(function).execute(gun.world, position, hitSide, hitType, bulletItem);
                 }
             }
         }
