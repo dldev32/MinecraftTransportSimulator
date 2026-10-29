@@ -16,6 +16,7 @@ import minecrafttransportsimulator.baseclasses.Point3D;
 import minecrafttransportsimulator.blocks.components.ABlockBase.Axis;
 import minecrafttransportsimulator.items.components.AItemBase;
 import minecrafttransportsimulator.items.components.AItemPack;
+import minecrafttransportsimulator.items.components.IItemBlock;
 import minecrafttransportsimulator.items.components.IItemFood;
 import minecrafttransportsimulator.items.instances.ItemItem;
 import minecrafttransportsimulator.items.instances.ItemPartGun;
@@ -179,6 +180,10 @@ public class BuilderItem extends Item implements IBuilderItemInterface {
     public InteractionResult useOn(UseOnContext context) {
         if (context.getHand() == InteractionHand.MAIN_HAND) {
             if (item.onBlockClicked(WrapperWorld.getWrapperFor(context.getLevel()), WrapperPlayer.getWrapperFor(context.getPlayer()), new Point3D(context.getClickedPos().getX(), context.getClickedPos().getY(), context.getClickedPos().getZ()), Axis.valueOf(context.getClickedFace().name()))) {
+                return InteractionResult.SUCCESS;
+            } else if (context.getLevel().isClientSide && item instanceof IItemBlock) {
+                //Placement and tile initialization run on the server.  Report success so
+                //client placement handlers (e.g. Axiom Force Place) send the click there.
                 return InteractionResult.SUCCESS;
             } else if (context.getPlayer() != null && context.getPlayer().isCrouching()) {
                 //Forward sneak click too, since blocks don't get these.
