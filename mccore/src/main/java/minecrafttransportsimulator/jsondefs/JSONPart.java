@@ -546,7 +546,7 @@ public class JSONPart extends AJSONPartProvider {
         BORESIGHT,
         @JSONDescription("Goes where the player is pointed")
         MANUAL,
-        @JSONDescription("Goes where the radar tells it to.")
+        @JSONDescription("Automatically locks the nearest eligible vehicle or approaching guided missile detected by a radar on the same assembly. Guided rounds track the launch target using returns from that radar.")
         RADAR
     }
 
@@ -555,12 +555,14 @@ public class JSONPart extends AJSONPartProvider {
         ALL,
         @JSONDescription("Only Locks onto ground vehicles.")
         GROUND,
-        @JSONDescription("Only locks on to aircraft.")
+        @JSONDescription("Only locks on to aircraft. Radar lock-on also includes approaching guided missiles.")
         AIRCRAFT,
-        @JSONDescription("Will lock either aircraft or ground vehicles. Hard targets.")
+        @JSONDescription("Will lock either aircraft or ground vehicles. Radar lock-on also includes approaching guided missiles.")
         HARD,
         @JSONDescription("Only locks on to players or mobs.")
-        SOFT
+        SOFT,
+        @JSONDescription("Only locks on to approaching guided missiles. Requires radar lock-on.")
+        MISSILE
     }
 
     public static class JSONPartInteractable {

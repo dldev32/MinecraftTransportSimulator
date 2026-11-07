@@ -17,6 +17,7 @@ import minecrafttransportsimulator.blocks.components.ABlockBase.Axis;
 import minecrafttransportsimulator.entities.components.AEntityD_Definable;
 import minecrafttransportsimulator.entities.components.AEntityE_Interactable;
 import minecrafttransportsimulator.entities.components.AEntityF_Multipart;
+import minecrafttransportsimulator.entities.components.Radar;
 import minecrafttransportsimulator.items.instances.ItemBullet;
 import minecrafttransportsimulator.jsondefs.JSONBullet;
 import minecrafttransportsimulator.jsondefs.JSONBullet.BulletType;
@@ -42,9 +43,9 @@ import minecrafttransportsimulator.systems.LanguageSystem;
  * are particles.  This allows them to be independent of the
  * vehicle that fired them.
  * <p>
- * As particles, bullets are client-side only.  This prevents them from getting stuck
- * in un-loaded chunks on the server, and prevents the massive network usage that
- * would be required to spawn 100s of bullets from a machine gun into the world.
+ * Ordinary player-fired bullet hits are checked on the firing client to avoid
+ * synchronizing hundreds of machine-gun rounds. Guided, long-range and NPC-fired
+ * rounds also exist on the server, which checks their impacts and interception.
  *
  * @author don_bruce
  */
@@ -64,6 +65,7 @@ public class EntityBullet extends AEntityD_Definable<JSONBullet> {
     //States
     public boolean waitingOnActionPacket;
     private int impactDespawnTimer = -1;
+    private long movementTick = Long.MIN_VALUE;
     private Point3D targetPosition;
     public double targetDistance;
     private double distanceTraveled;
@@ -73,6 +75,7 @@ public class EntityBullet extends AEntityD_Definable<JSONBullet> {
     private Point3D normalizedConeVector = new Point3D();
     private Point3D normalizedEntityVector = new Point3D();
     private PartEngine engineTargeted;
+    private Radar.Contact radarTargeted;
     private IWrapperEntity externalEntityTargeted;
     public HitType lastHit;
     public Axis sideHit;
@@ -123,6 +126,18 @@ public class EntityBullet extends AEntityD_Definable<JSONBullet> {
         this.engineTargeted = engineTargeted;
         engineTargeted.vehicleOn.missilesIncoming.add(this);
         displayDebugMessage("LOCKON ENGINE " + engineTargeted.definition.systemName + " @ " + targetPosition);
+    }
+
+    /**
+     * Target tracked by the launch radar.
+     */
+    public EntityBullet(Point3D position, Point3D motion, RotationMatrix orientation, PartGun gun, int bulletNumber, Radar.Contact radarTargeted) {
+        this(position, motion, orientation, gun, bulletNumber, radarTargeted.position);
+        this.radarTargeted = radarTargeted;
+        targetDistance = position.distanceTo(targetPosition);
+        if (radarTargeted.vehicle != null) {
+            radarTargeted.vehicle.missilesIncoming.add(this);
+        }
     }
 
     /**
@@ -198,72 +213,76 @@ public class EntityBullet extends AEntityD_Definable<JSONBullet> {
             //Guidance code for missiles
             //First check to see if it can move yet
             if (definition.bullet.turnRate > 0 && !notAcceleratingYet) {
-                //First, get target positions based on guidance method.
-                switch (definition.bullet.guidanceType) {
-                    //Bullet will track whatever the gun was locked to, but if it can't see it,
-                    //it will continue looking and track the closest thing that comes into its view cone.
-                    case PASSIVE: {
-                        //goes for what it can see, even if bullet lock is broken.
-                        //will search for its own target if fired without one
-                        //cant get this to work w/o crashing atm
-                        break;
-                    }
-                    case SEMI_ACTIVE: {
-                        //Gun must be locked to the target for the bullet to know where it is.
-                        if (externalEntityTargeted != null) {
-                            if (externalEntityTargeted.isValid()) {
-                                targetPosition.set(externalEntityTargeted.getPosition()).add(0, externalEntityTargeted.getBounds().heightRadius, 0);
-                            } else if (gun.entityTarget == null) {
-                                targetPosition = null;
-                            } else {
-                                //Entity is dead. Don't target it anymore.
-                                externalEntityTargeted = null;
-                                targetPosition = null;
-                            }
-                        } else if (engineTargeted != null) {
-                            if (gun.engineTarget == null) {
-                                targetPosition = null;
-                            }
-                            //Don't need to update the position variable for engines, as it auto-syncs.
-                            //Do need to check if the engine is still warm and valid, however.
-                            if (!engineTargeted.isValid) {// || engineTargeted.temp <= PartEngine.COLD_TEMP){
-                                engineTargeted.vehicleOn.missilesIncoming.remove(this);
-                                engineTargeted = null;
-                                targetPosition = null;
-                            }
+                if (radarTargeted != null) {
+                    updateRadarTarget();
+                } else {
+                    //First, get target positions based on guidance method.
+                    switch (definition.bullet.guidanceType) {
+                        //Bullet will track whatever the gun was locked to, but if it can't see it,
+                        //it will continue looking and track the closest thing that comes into its view cone.
+                        case PASSIVE: {
+                            //goes for what it can see, even if bullet lock is broken.
+                            //will search for its own target if fired without one
+                            //cant get this to work w/o crashing atm
+                            break;
                         }
-                        break;
-                    }
-                    case ACTIVE: {
-                        Point3D startPoint = position;
-                        Point3D searchVector = new Point3D(0, 0, definition.bullet.seekerRange).rotate(orientation);
-                        double coneAngle = definition.bullet.seekerMaxAngle;
-                        //Always knows where the target is once fired.
-                        if (externalEntityTargeted != null) {
-                            //check to see if target is able to be locked on to still.(seeker can see it)
-                            normalizedConeVector.set(searchVector).normalize();
-                            normalizedEntityVector.set(externalEntityTargeted.getPosition()).subtract(startPoint).normalize();
-                            double targetAngle = Math.abs(Math.toDegrees(Math.acos(normalizedConeVector.dotProduct(normalizedEntityVector, false))));
-                            if (externalEntityTargeted.isValid() && targetAngle < coneAngle || world.getBlockHit(startPoint, targetPosition) != null || targetPosition.distanceTo(position) > definition.bullet.seekerRange) {
-                                targetPosition.set(externalEntityTargeted.getPosition()).add(0, externalEntityTargeted.getBounds().heightRadius, 0);
-                            } else {
-                                //Entity is dead. Don't target it anymore.
-                                externalEntityTargeted = null;
-                                targetPosition = null;
+                        case SEMI_ACTIVE: {
+                            //Gun must be locked to the target for the bullet to know where it is.
+                            if (externalEntityTargeted != null) {
+                                if (externalEntityTargeted.isValid()) {
+                                    targetPosition.set(externalEntityTargeted.getPosition()).add(0, externalEntityTargeted.getBounds().heightRadius, 0);
+                                } else if (gun.entityTarget == null) {
+                                    targetPosition = null;
+                                } else {
+                                    //Entity is dead. Don't target it anymore.
+                                    externalEntityTargeted = null;
+                                    targetPosition = null;
+                                }
+                            } else if (engineTargeted != null) {
+                                if (gun.engineTarget == null) {
+                                    targetPosition = null;
+                                }
+                                //Don't need to update the position variable for engines, as it auto-syncs.
+                                //Do need to check if the engine is still warm and valid, however.
+                                if (!engineTargeted.isValid) {// || engineTargeted.temp <= PartEngine.COLD_TEMP){
+                                    engineTargeted.vehicleOn.missilesIncoming.remove(this);
+                                    engineTargeted = null;
+                                    targetPosition = null;
+                                }
                             }
-                        } else if (engineTargeted != null) {
-                            normalizedConeVector.set(searchVector).normalize();
-                            normalizedEntityVector.set(engineTargeted.vehicleOn.position).subtract(startPoint).normalize();
-                            double targetAngle = Math.abs(Math.toDegrees(Math.acos(normalizedConeVector.dotProduct(normalizedEntityVector, false))));
-                            //Don't need to update the position variable for engines, as it auto-syncs.
-                            //Do need to check if the engine is still warm and valid, however.
-                            if (!engineTargeted.isValid || targetAngle > coneAngle || world.getBlockHit(startPoint, targetPosition) != null || targetPosition.distanceTo(position) > definition.bullet.seekerRange) {// || engineTargeted.temp <= PartEngine.COLD_TEMP){
-                                engineTargeted.vehicleOn.missilesIncoming.remove(this);
-                                engineTargeted = null;
-                                targetPosition = null;
-                            }
+                            break;
                         }
-                        break;
+                        case ACTIVE: {
+                            Point3D startPoint = position;
+                            Point3D searchVector = new Point3D(0, 0, definition.bullet.seekerRange).rotate(orientation);
+                            double coneAngle = definition.bullet.seekerMaxAngle;
+                            //Always knows where the target is once fired.
+                            if (externalEntityTargeted != null) {
+                                //check to see if target is able to be locked on to still.(seeker can see it)
+                                normalizedConeVector.set(searchVector).normalize();
+                                normalizedEntityVector.set(externalEntityTargeted.getPosition()).subtract(startPoint).normalize();
+                                double targetAngle = Math.abs(Math.toDegrees(Math.acos(normalizedConeVector.dotProduct(normalizedEntityVector, false))));
+                                if (externalEntityTargeted.isValid() && targetAngle < coneAngle || world.getBlockHit(startPoint, targetPosition) != null || targetPosition.distanceTo(position) > definition.bullet.seekerRange) {
+                                    targetPosition.set(externalEntityTargeted.getPosition()).add(0, externalEntityTargeted.getBounds().heightRadius, 0);
+                                } else {
+                                    //Entity is dead. Don't target it anymore.
+                                    externalEntityTargeted = null;
+                                    targetPosition = null;
+                                }
+                            } else if (engineTargeted != null) {
+                                normalizedConeVector.set(searchVector).normalize();
+                                normalizedEntityVector.set(engineTargeted.vehicleOn.position).subtract(startPoint).normalize();
+                                double targetAngle = Math.abs(Math.toDegrees(Math.acos(normalizedConeVector.dotProduct(normalizedEntityVector, false))));
+                                //Don't need to update the position variable for engines, as it auto-syncs.
+                                //Do need to check if the engine is still warm and valid, however.
+                                if (!engineTargeted.isValid || targetAngle > coneAngle || world.getBlockHit(startPoint, targetPosition) != null || targetPosition.distanceTo(position) > definition.bullet.seekerRange) {// || engineTargeted.temp <= PartEngine.COLD_TEMP){
+                                    engineTargeted.vehicleOn.missilesIncoming.remove(this);
+                                    engineTargeted = null;
+                                    targetPosition = null;
+                                }
+                            }
+                            break;
+                        }
                     }
                 }
 
@@ -273,7 +292,9 @@ public class EntityBullet extends AEntityD_Definable<JSONBullet> {
                         targetVector = new Point3D();
                     }
                     double ticksToTarget = targetPosition.distanceTo(position) / (velocity / 20D);
-                    if (engineTargeted != null && (gun.definition.gun.targetType == TargetType.ALL || gun.definition.gun.targetType == TargetType.AIRCRAFT || gun.definition.gun.targetType == TargetType.GROUND)) {
+                    if (radarTargeted != null && radarTargeted.isMissile()) {
+                        targetVector.set(radarTargeted.getLeadPoint(position, motion.length())).subtract(position).reOrigin(orientation).getAngles(true);
+                    } else if (engineTargeted != null && (gun.definition.gun.targetType == TargetType.ALL || gun.definition.gun.targetType == TargetType.AIRCRAFT || gun.definition.gun.targetType == TargetType.GROUND)) {
                         targetVector.set(targetPosition).addScaled(engineTargeted.vehicleOn.motion, (engineTargeted.vehicleOn.speedFactor / 20D) * ticksToTarget).subtract(position).reOrigin(orientation).getAngles(true);
                     } else if (externalEntityTargeted != null && (gun.definition.gun.targetType == TargetType.ALL || gun.definition.gun.targetType == TargetType.SOFT)) {
                         targetVector.set(targetPosition).addScaled(externalEntityTargeted.getVelocity(), (externalEntityTargeted.getVelocity().length() / 20D) * ticksToTarget).subtract(position).reOrigin(orientation).getAngles(true);
@@ -316,9 +337,10 @@ public class EntityBullet extends AEntityD_Definable<JSONBullet> {
                 orientation.setToVector(motion, true);
             }
 
-            //Long-range bullets and those fired by NPCs do checks on server only, all others do so on clients.
+            //Guided and long-range bullets, plus those fired by NPCs, are simulated on the server.
+            //Guided rounds need server copies so other weapons can detect and intercept them.
             //We only do client checks on the primary client, not all clients.
-            if (((definition.bullet.isLongRange || !(gun.lastController instanceof IWrapperPlayer)) ^ world.isClient()) && (!world.isClient() || InterfaceManager.clientInterface.getClientPlayer().getID().equals(gun.lastController.getID()))) {
+            if (((definition.bullet.isLongRange || definition.bullet.turnRate > 0 || !(gun.lastController instanceof IWrapperPlayer)) ^ world.isClient()) && (!world.isClient() || InterfaceManager.clientInterface.getClientPlayer().getID().equals(gun.lastController.getID()))) {
                 //Now that we have an accurate motion, check for collisions.
                 //First get a damage object to try to attack entities with.
                 double amount = definition.bullet.isHeat ? definition.bullet.damage : (velocity / initialVelocity) * definition.bullet.damage * ConfigSystem.settings.damage.bulletDamageFactor.value * ConfigSystem.settings.damage.packBulletDamageFactors.value.get(gun.lastLoadedBullet.definition.packID);
@@ -415,6 +437,11 @@ public class EntityBullet extends AEntityD_Definable<JSONBullet> {
                     }
                 }
 
+                //Use relative swept motion so fast missiles cannot cross between ticks without a hit.
+                if (tryInterceptMissile(hitBlock, hitExternalEntityPosition, hitMultipartBoxes)) {
+                    return;
+                }
+
                 //At this point, whatever we have to attack should be attacked.
                 //First attack the entity, since the bullet could go through it and hit a entity or block on the other side.
                 if (hitMultipart != null && hitMultipart.attackProjectile(damage, this, hitMultipartBoxes) != null) {
@@ -458,7 +485,7 @@ public class EntityBullet extends AEntityD_Definable<JSONBullet> {
                 }
 
                 //Hit nothing this tick.  Check proximity fuze against our target and blocks.
-                if (definition.bullet.proximityFuze != 0 && distanceTraveled > definition.bullet.proximityFuze * 3) {
+                if (definition.bullet.proximityFuze != 0 && distanceTraveled > definition.bullet.proximityFuze * 3 && (radarTargeted == null || !radarTargeted.isMissile())) {
                     HitType hitType = null;
                     Point3D targetToHit = null;
                     if (targetPosition != null) {
@@ -557,6 +584,7 @@ public class EntityBullet extends AEntityD_Definable<JSONBullet> {
 
             //Add our updated motion to the position last so we can damage on the first update tick.
             position.add(motion);
+            movementTick = world.getTickCount();
 
             //Set gun pos if the gun has requested it by creating it.
             if (relativeGunPos != null) {
@@ -566,15 +594,88 @@ public class EntityBullet extends AEntityD_Definable<JSONBullet> {
         }
     }
 
+    public boolean isInFlight() {
+        return isValid && impactDespawnTimer < 0 && !waitingOnActionPacket;
+    }
+
+    private boolean tryInterceptMissile(BlockHitResult blockHit, Point3D entityHit, Collection<BoundingBoxHitResult> multipartHits) {
+        if (world.isClient() || radarTargeted == null || !radarTargeted.isMissile()) {
+            return false;
+        }
+        EntityBullet target = (EntityBullet) radarTargeted.target;
+        if (!target.isInFlight()) {
+            return false;
+        }
+        Point3D targetStart = target.movementTick == world.getTickCount() ? target.prevPosition : target.position;
+        Point3D offset = targetStart.copy().subtract(position);
+        Point3D relativeMotion = target.motion.copy().subtract(motion);
+        double radius = boundingBox.widthRadius + target.boundingBox.widthRadius;
+        if (definition.bullet.proximityFuze > 0 && distanceTraveled > definition.bullet.proximityFuze * 3) {
+            radius = Math.max(radius, definition.bullet.proximityFuze);
+        }
+        double a = relativeMotion.dotProduct(relativeMotion, false);
+        double b = offset.dotProduct(relativeMotion, false);
+        double c = offset.dotProduct(offset, false) - radius * radius;
+        double fraction = 0;
+        if (c > 0) {
+            double discriminant = b * b - a * c;
+            if (a <= 1.0E-12 || b >= 0 || discriminant < 0) {
+                return false;
+            }
+            fraction = (-b - Math.sqrt(discriminant)) / a;
+            if (fraction < 0 || fraction > 1) {
+                return false;
+            }
+        }
+        Point3D impact = position.copy().addScaled(motion, fraction);
+        if ((blockHit != null && position.isFirstCloserThanSecond(blockHit.hitPosition, impact))
+                || (entityHit != null && position.isFirstCloserThanSecond(entityHit, impact))) {
+            return false;
+        }
+        if (multipartHits != null) {
+            for (BoundingBoxHitResult hit : multipartHits) {
+                if (position.isFirstCloserThanSecond(hit.position, impact)) {
+                    return false;
+                }
+            }
+        }
+        Point3D targetImpact = targetStart.copy().addScaled(target.motion, fraction);
+        performGenericHitLogic(target.gun, target.bulletNumber, targetImpact, target.orientation, Axis.NONE, HitType.BURST);
+        performGenericHitLogic(gun, bulletNumber, impact, orientation, Axis.NONE, HitType.ENTITY);
+        return true;
+    }
+
+    private void updateRadarTarget() {
+        Radar.Contact contact = radarTargeted.radar.getContact(radarTargeted.target);
+        if (radarTargeted.vehicle != null) {
+            if (contact == null && targetPosition != null) {
+                radarTargeted.vehicle.missilesIncoming.remove(this);
+            } else if (contact != null && targetPosition == null) {
+                radarTargeted.vehicle.missilesIncoming.add(this);
+            }
+        }
+        if (contact != null) {
+            radarTargeted = contact;
+        }
+        targetPosition = contact != null ? contact.position : null;
+    }
+
+    private void clearTargetRegistration() {
+        if (engineTargeted != null) {
+            engineTargeted.vehicleOn.missilesIncoming.remove(this);
+        }
+        if (radarTargeted != null && radarTargeted.vehicle != null) {
+            radarTargeted.vehicle.missilesIncoming.remove(this);
+        }
+    }
+
     @Override
     public void remove() {
         super.remove();
         if (gun.definition.gun.lockOnType == LockOnType.MANUAL) {
             gun.activeManualBullets.remove(this);
         }
-        if (engineTargeted != null) {
-            engineTargeted.vehicleOn.missilesIncoming.remove(this);
-        }
+        clearTargetRegistration();
     }
 
     @Override
@@ -698,6 +799,7 @@ public class EntityBullet extends AEntityD_Definable<JSONBullet> {
             bullet.lastHit = hitType;
             bullet.sideHit = hitSide;
             bullet.impactDespawnTimer = bullet.definition.bullet.impactDespawnTime;
+            bullet.clearTargetRegistration();
 
             //If we are on the client, do one last particle check.
             //This lets systems query the blocks we hit before the server adjusts them the next tick.

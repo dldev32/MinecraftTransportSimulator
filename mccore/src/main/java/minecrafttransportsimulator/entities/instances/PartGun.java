@@ -15,6 +15,7 @@ import minecrafttransportsimulator.baseclasses.Point3D;
 import minecrafttransportsimulator.baseclasses.RotationMatrix;
 import minecrafttransportsimulator.baseclasses.TransformationMatrix;
 import minecrafttransportsimulator.entities.components.AEntityF_Multipart;
+import minecrafttransportsimulator.entities.components.Radar;
 import minecrafttransportsimulator.items.components.AItemBase;
 import minecrafttransportsimulator.items.instances.ItemBullet;
 import minecrafttransportsimulator.items.instances.ItemPartGun;
@@ -135,6 +136,7 @@ public class PartGun extends APart {
     private Point3D controllerRelativeLookVector = new Point3D();
     public IWrapperEntity entityTarget;
     public PartEngine engineTarget;
+    private Radar.Contact radarTarget;
     public Point3D targetPosition;
     public EntityBullet currentBullet;
     public final Set<EntityBullet> activeManualBullets = new HashSet<>();
@@ -160,9 +162,7 @@ public class PartGun extends APart {
     private final Point3D normalizedEntityVector = new Point3D();
     private final Point3D controllerCameraRelativeAngles = new Point3D();
 
-    //Track previous targets to detect changes for registration
-    private PartEngine prevEngineTarget = null;
-    private IWrapperEntity prevEntityTarget = null;
+    private AEntityVehicleE_Powered registeredTargetVehicle;
 
     //Global data.
     private static final int PITCH_RECOIL_CLAMPING = 80;
@@ -325,6 +325,7 @@ public class PartGun extends APart {
         cameraControlActiveThisTick = false;
         firedThisTick = false;
         isRunningInCoaxialMode = false;
+        radarTarget = null;
         prevInternalOrientation.set(internalOrientation);
         updateCoaxialReferenceOrientation();
         if (placementDefinition.isCoAxial && partOn instanceof PartGun) {
@@ -351,7 +352,6 @@ public class PartGun extends APart {
                         currentController = null;
                         entityTarget = null;
                         engineTarget = null;
-                        updateTargetRegistration();
                     }
                 }
             }
@@ -393,7 +393,7 @@ public class PartGun extends APart {
                     currentController = null;
                     entityTarget = null;
                     engineTarget = null;
-                    updateTargetRegistration();
+                    radarTarget = null;
                 }
             }
 
@@ -473,7 +473,7 @@ public class PartGun extends APart {
                     //The only exception is if the server is the controller, in that case fire until we are told to stop.
                     //This can happen if the gun fires quickly and bullet counts get de-synced with on/off states.
                     boolean cycledGun = false;
-                    boolean serverIsPrimaryController = lastLoadedBullet != null && (lastLoadedBullet.definition.bullet.isLongRange || !(lastController instanceof IWrapperPlayer));
+                    boolean serverIsPrimaryController = lastLoadedBullet != null && (lastLoadedBullet.definition.bullet.isLongRange || lastLoadedBullet.definition.bullet.turnRate > 0 || !(lastController instanceof IWrapperPlayer));
                     if (loadedBulletCount > 0 || (world.isClient() && serverIsPrimaryController && bulletsPresentOnServer)) {
                         state = state.promote(GunState.FIRING_CURRENTLY);
 
@@ -495,7 +495,9 @@ public class PartGun extends APart {
                                         //If the bullet is a missile, give it a target.
                                         EntityBullet newBullet;
                                         if (lastLoadedBullet.definition.bullet.turnRate > 0) {
-                                            if (entityTarget != null) {
+                                            if (radarTarget != null) {
+                                                newBullet = new EntityBullet(bulletPosition, bulletVelocity, bulletOrientation, this, bulletsFired, radarTarget);
+                                            } else if (entityTarget != null) {
                                                 newBullet = new EntityBullet(bulletPosition, bulletVelocity, bulletOrientation, this, bulletsFired, entityTarget);
                                             } else if (engineTarget != null) {
                                                 newBullet = new EntityBullet(bulletPosition, bulletVelocity, bulletOrientation, this, bulletsFired, engineTarget);
@@ -609,11 +611,12 @@ public class PartGun extends APart {
             state = GunState.INACTIVE;
             entityTarget = null;
             engineTarget = null;
-            updateTargetRegistration();
             if (resetPosition) {
                 handleMovement(defaultYaw - internalOrientation.angles.y, defaultPitch - internalOrientation.angles.x);
             }
         }
+
+        updateTargetRegistration();
 
         //If we are reloading, decrement the reloading timer.
         //If we are done reloading, add the new bullets.
@@ -701,6 +704,10 @@ public class PartGun extends APart {
     @Override
     public void remove() {
         clearCameraControl();
+        if (registeredTargetVehicle != null) {
+            registeredTargetVehicle.gunsLockedOn.remove(this);
+            registeredTargetVehicle = null;
+        }
         super.remove();
     }
 
@@ -875,7 +882,6 @@ public class PartGun extends APart {
                     }
                 } else {
                     entityTarget = null;
-                    updateTargetRegistration();
                     state = state.demote(GunState.CONTROLLED);
                 }
             } else {
@@ -910,7 +916,7 @@ public class PartGun extends APart {
                         break;
                     }
                     case RADAR: {
-                        //Set target here immediately.
+                        radarTarget = findRadarTarget();
                         break;
                     }
                     case MANUAL: {
@@ -927,7 +933,6 @@ public class PartGun extends APart {
                 //First set targets to null to clear any existing targets.
                 engineTarget = null;
                 entityTarget = null;
-                updateTargetRegistration();
 
                 //If we have a start point, it means we're a cone-based target system and need to find a target.
                 if (startPoint != null) {
@@ -990,7 +995,6 @@ public class PartGun extends APart {
                             }
                         }
                     }
-                    updateTargetRegistration();
                 }
             }
 
@@ -1480,13 +1484,36 @@ public class PartGun extends APart {
         }
     }
 
+    private Radar.Contact findRadarTarget() {
+        double range = definition.gun.lockRange;
+        TargetType type = definition.gun.targetType;
+        Radar radar = masterEntity.getRadar();
+        Radar.Contact closest = radar != null ? radar.getClosestContact(position, range, type, null) : null;
+        for (APart part : masterEntity.allParts) {
+            radar = part.getRadar();
+            if (radar != null) {
+                closest = radar.getClosestContact(position, range, type, closest);
+            }
+        }
+        return closest;
+    }
+
+    private Point3D getLockedOnPosition() {
+        if (radarTarget != null) {
+            return radarTarget.position;
+        }
+        if (entityTarget != null) {
+            return entityTarget.getPosition();
+        }
+        return engineTarget != null ? engineTarget.position : null;
+    }
+
     public double getLockedOnDirection(){
         double direction = 0;
         Point3D referencePos = vehicleOn != null ? vehicleOn.position : position;
-        if (engineTarget != null) {
-            direction = Math.toDegrees(Math.atan2(-engineTarget.vehicleOn.position.z + referencePos.z, -engineTarget.vehicleOn.position.x + referencePos.x)) + 90 + orientation.angles.y;
-        } else if (entityTarget != null) {
-            direction = Math.toDegrees(Math.atan2(-entityTarget.getPosition().z + referencePos.z, -entityTarget.getPosition().x + referencePos.x)) + 90 + orientation.angles.y;
+        Point3D lockedPosition = engineTarget != null ? engineTarget.vehicleOn.position : getLockedOnPosition();
+        if (lockedPosition != null) {
+            direction = Math.toDegrees(Math.atan2(-lockedPosition.z + referencePos.z, -lockedPosition.x + referencePos.x)) + 90 + orientation.angles.y;
         }
         while (direction < -180)
             direction += 360;
@@ -1496,13 +1523,7 @@ public class PartGun extends APart {
     }
 
     public double getLockedOnAngle(){
-        double angle = 0;
-        Point3D referencePos = vehicleOn != null ? vehicleOn.position : position;
-        if (engineTarget != null) {
-            angle = -Math.toDegrees(Math.atan2(-engineTarget.position.y + referencePos.y,Math.hypot(-engineTarget.position.z + referencePos.z,-engineTarget.position.x + referencePos.x))) + orientation.angles.x;
-        } else if (entityTarget != null) {
-            angle = -Math.toDegrees(Math.atan2(-entityTarget.getPosition().y + referencePos.y,Math.hypot(-entityTarget.getPosition().z + referencePos.z,-entityTarget.getPosition().x + referencePos.x))) + orientation.angles.x;
-        }
+        double angle = getUnwrappedLockAngle();
         while (angle < -180)
             angle += 360;
         while (angle > 180)
@@ -1513,7 +1534,9 @@ public class PartGun extends APart {
     public Point3D getLockedOnLeadPoint(){
         Point3D leadPoint = new Point3D();
         double ticksToTarget = 0;
-        if (engineTarget != null) {
+        if (radarTarget != null) {
+            leadPoint.set(radarTarget.isMissile() ? radarTarget.getLeadPoint(position, muzzleVelocityVar.currentValue / 20D) : radarTarget.position);
+        } else if (engineTarget != null) {
             ticksToTarget = engineTarget.vehicleOn.position.distanceTo(position) / (muzzleVelocityVar.currentValue / 20D);
             leadPoint.set(engineTarget.vehicleOn.position).addScaled(engineTarget.vehicleOn.motion, (engineTarget.vehicleOn.speedFactor) * ticksToTarget);
         } else if (entityTarget != null) {
@@ -1525,8 +1548,9 @@ public class PartGun extends APart {
 
     public double getLeadPointDirection(){
         double direction = 0;
-        if (engineTarget != null || entityTarget != null) {
-            direction = Math.toDegrees(Math.atan2(-getLockedOnLeadPoint().z + position.z, -getLockedOnLeadPoint().x + position.x)) + 90 + orientation.angles.y;
+        if (getLockedOnPosition() != null) {
+            Point3D leadPoint = getLockedOnLeadPoint();
+            direction = Math.toDegrees(Math.atan2(-leadPoint.z + position.z, -leadPoint.x + position.x)) + 90 + orientation.angles.y;
         }
         while (direction < -180)
             direction += 360;
@@ -1550,33 +1574,40 @@ public class PartGun extends APart {
     }
 
     public double getLeadAngleY() {
-        double angle = 0;
-        Point3D referencePos = vehicleOn != null ? vehicleOn.position : position;
-        if(engineTarget != null) {
-            angle = (-Math.toDegrees(Math.atan2(-getLockedOnLeadPoint().y + position.y, Math.hypot(-getLockedOnLeadPoint().z + position.z, -getLockedOnLeadPoint().x + position.x))) + orientation.angles.x) - (-Math.toDegrees(Math.atan2(-engineTarget.position.y + referencePos.y, Math.hypot(-engineTarget.position.z + referencePos.z, -engineTarget.position.x + referencePos.x))) + orientation.angles.x);
-        } else if (entityTarget != null) {
-            angle = (-Math.toDegrees(Math.atan2(-getLockedOnLeadPoint().y + position.y, Math.hypot(-getLockedOnLeadPoint().z + position.z, -getLockedOnLeadPoint().x + position.x))) + orientation.angles.x) - (-Math.toDegrees(Math.atan2(-entityTarget.getPosition().y + referencePos.y, Math.hypot(-entityTarget.getPosition().z + referencePos.z, -entityTarget.getPosition().x + referencePos.x))) + orientation.angles.x);
-        }
-        return angle;
+        return getLeadPointAngle() - getUnwrappedLockAngle();
     }
 
-    /**
-     * Updates target registration. Call this whenever entityTarget or engineTarget changes.
-     */
+    private double getUnwrappedLockAngle() {
+        Point3D lockedPosition = engineTarget != null ? engineTarget.position : getLockedOnPosition();
+        if (lockedPosition == null) {
+            return 0;
+        }
+        Point3D referencePos = vehicleOn != null ? vehicleOn.position : position;
+        return Math.toDegrees(Math.atan2(lockedPosition.y - referencePos.y, Math.hypot(lockedPosition.z - referencePos.z, lockedPosition.x - referencePos.x))) + orientation.angles.x;
+    }
+
+    private double getLeadPointAngle() {
+        if (getLockedOnPosition() == null) {
+            return 0;
+        }
+        Point3D leadPoint = getLockedOnLeadPoint();
+        return Math.toDegrees(Math.atan2(leadPoint.y - position.y, Math.hypot(leadPoint.z - position.z, leadPoint.x - position.x))) + orientation.angles.x;
+    }
+
     private void updateTargetRegistration() {
-        // Check if engine target changed
-        if (engineTarget != prevEngineTarget) {
-            prevEngineTarget = engineTarget;
-            // Registers this gun with the target vehicle's gunsLockedOn list. I hope.
-            if (engineTarget != null && engineTarget.vehicleOn != null && engineTarget.vehicleOn != vehicleOn) {
-                AEntityVehicleE_Powered targetVehicle = engineTarget.vehicleOn;
-                if (!targetVehicle.gunsLockedOn.contains(this)) {
-                    targetVehicle.gunsLockedOn.add(this);
-                }
+        AEntityVehicleE_Powered targetVehicle = radarTarget != null ? radarTarget.vehicle : (engineTarget != null ? engineTarget.vehicleOn : null);
+        if (!isValid || targetVehicle == vehicleOn) {
+            targetVehicle = null;
+        }
+        if (targetVehicle != registeredTargetVehicle) {
+            if (registeredTargetVehicle != null) {
+                registeredTargetVehicle.gunsLockedOn.remove(this);
+            }
+            registeredTargetVehicle = targetVehicle;
+            if (registeredTargetVehicle != null) {
+                registeredTargetVehicle.gunsLockedOn.add(this);
             }
         }
-        // Note: entityTarget targets are players/mobs, not vehicles, so we don't register for those
-        prevEntityTarget = entityTarget;
     }
 
     @Override
@@ -1601,27 +1632,41 @@ public class PartGun extends APart {
             case ("gun_muzzleflash"):
                 return new ComputedVariable(this, variable, partialTicks -> firedThisTick && lastMillisecondFired + 25 < System.currentTimeMillis() ? 1 : 0, true);
             case ("gun_lockedon"):
-                return new ComputedVariable(this, variable, partialTicks -> entityTarget != null || engineTarget != null ? 1 : 0, false);
+                return new ComputedVariable(this, variable, partialTicks -> getLockedOnPosition() != null ? 1 : 0, false);
+            case ("gun_lockedon_missile"):
+                return new ComputedVariable(this, variable, partialTicks -> radarTarget != null && radarTarget.isMissile() ? 1 : 0, false);
             case ("gun_lockedon_x"):
-                return new ComputedVariable(this, variable, partialTicks -> entityTarget != null ? entityTarget.getPosition().x : (engineTarget != null ? engineTarget.position.x : 0), false);
             case ("gun_lockedon_y"):
-                return new ComputedVariable(this, variable, partialTicks -> entityTarget != null ? entityTarget.getPosition().y : (engineTarget != null ? engineTarget.position.y : 0), false);
             case ("gun_lockedon_z"):
-                return new ComputedVariable(this, variable, partialTicks -> entityTarget != null ? entityTarget.getPosition().z : (engineTarget != null ? engineTarget.position.z : 0), false);
-            case ("gun_lockedon_direction"):
-                return new ComputedVariable(this, variable, partialTicks -> entityTarget != null ? getLockedOnDirection() : (engineTarget != null ? getLockedOnDirection() : 0), false);
-            case ("gun_lockedon_angle"):
-                return new ComputedVariable(this, variable, partialTicks -> entityTarget != null ? getLockedOnAngle() : (engineTarget != null ? getLockedOnAngle() : 0), false);
-            case ("gun_lockedon_leadpoint_direction"):
-                return new ComputedVariable(this, variable, partialTicks -> entityTarget != null ? getLeadPointDirection() : (engineTarget != null ? getLeadPointDirection() : 0), false);
-            case ("gun_lockedon_leadpoint_angle"):
-                return new ComputedVariable(this, variable, partialTicks -> entityTarget != null ? (-Math.toDegrees(Math.atan2(-getLockedOnLeadPoint().y + position.y, Math.hypot(-getLockedOnLeadPoint().z + position.z, -getLockedOnLeadPoint().x + position.x))) + orientation.angles.x) : (engineTarget != null ? (-Math.toDegrees(Math.atan2(-getLockedOnLeadPoint().y + position.y, Math.hypot(-getLockedOnLeadPoint().z + position.z, -getLockedOnLeadPoint().x + position.x))) + orientation.angles.x) : 0), false);
             case ("gun_lockedon_distance"):
-                return new ComputedVariable(this, variable, partialTicks -> entityTarget != null ? entityTarget.getPosition().distanceTo(position) : (engineTarget != null ? engineTarget.position.distanceTo(position) : 0), false);
+                return new ComputedVariable(this, variable, partialTicks -> {
+                    Point3D lockedPosition = getLockedOnPosition();
+                    if (lockedPosition == null) {
+                        return 0;
+                    }
+                    switch (variable) {
+                        case "gun_lockedon_x":
+                            return lockedPosition.x;
+                        case "gun_lockedon_y":
+                            return lockedPosition.y;
+                        case "gun_lockedon_z":
+                            return lockedPosition.z;
+                        default:
+                            return lockedPosition.distanceTo(position);
+                    }
+                }, false);
+            case ("gun_lockedon_direction"):
+                return new ComputedVariable(this, variable, partialTicks -> getLockedOnDirection(), false);
+            case ("gun_lockedon_angle"):
+                return new ComputedVariable(this, variable, partialTicks -> getLockedOnAngle(), false);
+            case ("gun_lockedon_leadpoint_direction"):
+                return new ComputedVariable(this, variable, partialTicks -> getLeadPointDirection(), false);
+            case ("gun_lockedon_leadpoint_angle"):
+                return new ComputedVariable(this, variable, partialTicks -> getLeadPointAngle(), false);
             case ("gun_lockedon_leadangle_x"):
-                return new ComputedVariable(this, variable, partialTicks -> entityTarget != null ? (getLeadPointDirection() - getLockedOnDirection()) : (engineTarget != null ? (getLeadPointDirection() - getLockedOnDirection()) : 0), false);
+                return new ComputedVariable(this, variable, partialTicks -> getLeadPointDirection() - getLockedOnDirection(), false);
             case ("gun_lockedon_leadangle_y"):
-                return new ComputedVariable(this, variable, partialTicks -> entityTarget != null ? getLeadAngleY() : (engineTarget != null ? getLeadAngleY() : 0), false);
+                return new ComputedVariable(this, variable, partialTicks -> getLeadAngleY(), false);
             case ("gun_pitch"):
                 return new ComputedVariable(this, variable, partialTicks -> partialTicks != 0 ? prevInternalOrientation.angles.x + (internalOrientation.angles.x - prevInternalOrientation.angles.x) * partialTicks : internalOrientation.angles.x, true);
             case ("gun_yaw"):

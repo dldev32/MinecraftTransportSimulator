@@ -53,7 +53,8 @@ public class GUIHUD extends AGUIBase {
 
     @Override
     public void setupComponents() {
-        //Only show instruments and background if we are a controller.
+        instruments.clear();
+        //Controller seats show vehicle instruments. Other seats show their own instruments.
         if (seat.placementDefinition.isController) {
             //Need to adjust GUITop if we are a half hud.  This makes everything go down 1/4 height.
             if (halfHUDActive) {
@@ -62,7 +63,6 @@ public class GUIHUD extends AGUIBase {
             super.setupComponents();
 
             //Add instruments.  These go wherever they are specified in the JSON.
-            instruments.clear();
             for (int i = 0; i < vehicle.instruments.size(); ++i) {
                 if (vehicle.instruments.get(i) != null && !vehicle.definition.instruments.get(i).placeOnPanel) {
                     GUIComponentInstrument instrument = new GUIComponentInstrument(guiLeft, guiTop, vehicle, i);
@@ -87,6 +87,13 @@ public class GUIHUD extends AGUIBase {
             }
         } else {
             super.setupComponents();
+            for (int i = 0; i < seat.instruments.size(); ++i) {
+                if (seat.instruments.get(i) != null && !seat.definition.instruments.get(i).placeOnPanel) {
+                    GUIComponentInstrument instrument = new GUIComponentInstrument(guiLeft, guiTop, seat, i);
+                    instruments.add(instrument);
+                    addComponent(instrument);
+                }
+            }
         }
 
         //Add labels.
@@ -123,7 +130,7 @@ public class GUIHUD extends AGUIBase {
         //Set all instrument invisible if we're not rendering the main HUD.
         //Otherwise, set them all visible.
         for (GUIComponentInstrument instrument : instruments) {
-            instrument.visible = CameraSystem.customCameraOverlay == null && seat.placementDefinition.isController && (InterfaceManager.clientInterface.getCameraMode() == CameraMode.FIRST_PERSON ? ConfigSystem.client.renderingSettings.renderHUD_1P.value : ConfigSystem.client.renderingSettings.renderHUD_3P.value);
+            instrument.visible = CameraSystem.customCameraOverlay == null && (seat.placementDefinition.isController || instrument.entity == seat) && (InterfaceManager.clientInterface.getCameraMode() == CameraMode.FIRST_PERSON ? ConfigSystem.client.renderingSettings.renderHUD_1P.value : ConfigSystem.client.renderingSettings.renderHUD_3P.value);
         }
 
         //Set health label text and visibility.

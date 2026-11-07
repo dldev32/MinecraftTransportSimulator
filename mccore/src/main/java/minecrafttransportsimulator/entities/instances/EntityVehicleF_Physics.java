@@ -1,7 +1,6 @@
 package minecrafttransportsimulator.entities.instances;
 
 import java.util.HashSet;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -11,7 +10,6 @@ import minecrafttransportsimulator.baseclasses.ComputedVariable;
 import minecrafttransportsimulator.baseclasses.Point3D;
 import minecrafttransportsimulator.baseclasses.TowingConnection;
 import minecrafttransportsimulator.baseclasses.TransformationMatrix;
-import minecrafttransportsimulator.entities.components.AEntityB_Existing;
 import minecrafttransportsimulator.entities.components.AEntityG_Towable;
 import minecrafttransportsimulator.items.instances.ItemVehicle;
 import minecrafttransportsimulator.mcinterface.AWrapperWorld;
@@ -755,6 +753,9 @@ public class EntityVehicleF_Physics extends AEntityVehicleE_Powered {
             return null;
         }
         return definition.packID + ":" + definition.systemName + (isArcadeFlightDefault() ? "|arcade" : "|standard");
+    }
+
+    /**
      * Returns how many degrees to rotate back towards level this tick for the passed-in tilt.
      * Removes the passed-in fraction of the tilt, capped by blimpLevelMaxRate if set.
      * Tilts under {@link #BLIMP_LEVEL_SNAP_ANGLE} are removed entirely so we stop at exactly level.
@@ -972,107 +973,30 @@ public class EntityVehicleF_Physics extends AEntityVehicleE_Powered {
                         }
                         return 0;
                     }, false);
-                }else if (variable.startsWith("radar_")) {
-                    final String[] parsedVariable = variable.split("_");
-            
-                    //First check if we are seeing with our own radar, or being seen.
-                    //Variable is in the form of radar_X_variablename for inbound, radar_T_X_variablename for outbound.
-                    if(parsedVariable.length == 3) {
-                      //Inbound contact from another radar.
-                        final int radarNumber = Integer.parseInt(parsedVariable[1]) - 1;
-                        switch (parsedVariable[2]) {
-                            case ("detected"):
-                                return new ComputedVariable(this, variable, partialTicks -> radarsTracking.size() > radarNumber ? 1 : 0, false);
-                            case ("distance"):
-                                return new ComputedVariable(this, variable, partialTicks -> radarsTracking.size() > radarNumber ? radarsTracking.get(radarNumber).position.distanceTo(position) : 0, false);
-                            case ("direction"): {
-                                return new ComputedVariable(this, variable, partialTicks -> {
-                                    if(radarsTracking.size() > radarNumber) {
-                                        Point3D entityPos = radarsTracking.get(radarNumber).position;
-                                        return Math.toDegrees(Math.atan2(-entityPos.z + position.z, -entityPos.x + position.x)) + 90 + orientation.angles.y;   
-                                    }else {
-                                        return 0;
-                                    }
-                                }, false);
+                } else if (variable.startsWith("radar_")) {
+                    //Inbound contact from another radar, in the form radar_X_variablename.
+                    String[] fields = variable.split("_");
+                    if (fields.length == 3 && fields[1].matches("[0-9]+")) {
+                        final int index = ComputedVariable.getVariableNumber(fields[1]);
+                        return new ComputedVariable(this, variable, partialTicks -> {
+                            if (index < 0 || index >= radarsTracking.size()) {
+                                return 0;
                             }
-                        }
-                    }else if(parsedVariable.length == 4) {
-                        //Outbound radar found, do logic.
-                        final List<EntityVehicleF_Physics> radarList;
-                        switch (parsedVariable[1]) {
-                            case ("aircraft"): {
-                                radarList = aircraftOnRadar;
-                                break;
+                            Point3D radarPosition = radarsTracking.get(index).position;
+                            switch (fields[2]) {
+                                case "detected":
+                                    return 1;
+                                case "distance":
+                                    return radarPosition.distanceTo(position);
+                                case "direction":
+                                    return Math.toDegrees(Math.atan2(-radarPosition.z + position.z, -radarPosition.x + position.x)) + 90 + orientation.angles.y;
+                                default:
+                                    return 0;
                             }
-                            case ("ground"): {
-                                radarList = groundersOnRadar;
-                                break;
-                            }
-                            default:
-                                //Invalid radar type.
-                                return new ComputedVariable(false);
-                        }
-                        
-                        final int radarNumber = Integer.parseInt(parsedVariable[2]) - 1;
-                        switch (parsedVariable[3]) {
-                            case ("distance"):
-                                return new ComputedVariable(this, variable, partialTicks -> {
-                                    if (radarNumber < radarList.size()) {
-                                        AEntityB_Existing contact = radarList.get(radarNumber);
-                                        return contact.position.distanceTo(position);
-                                    } else {
-                                        return 0;
-                                    }
-                                }, false);
-                            case ("direction"):
-                                return new ComputedVariable(this, variable, partialTicks -> {
-                                    if (radarNumber < radarList.size()) {
-                                        AEntityB_Existing contact = radarList.get(radarNumber);
-                                        double delta = Math.toDegrees(Math.atan2(-contact.position.z + position.z, -contact.position.x + position.x)) + 90 + orientation.angles.y;
-                                        while (delta < -180)
-                                            delta += 360;
-                                        while (delta > 180)
-                                            delta -= 360;
-                                        return delta;
-                                    } else {
-                                        return 0;
-                                    }
-                                }, false);
-                            case ("speed"):
-                                return new ComputedVariable(this, variable, partialTicks -> {
-                                    if (radarNumber < radarList.size()) {
-                                        AEntityB_Existing contact = radarList.get(radarNumber);
-                                        return contact.velocity;
-                                    } else {
-                                        return 0;
-                                    }
-                                }, false);
-                            case ("altitude"):
-                                return new ComputedVariable(this, variable, partialTicks -> {
-                                    if (radarNumber < radarList.size()) {
-                                        AEntityB_Existing contact = radarList.get(radarNumber);
-                                        return contact.position.y;
-                                    } else {
-                                        return 0;
-                                    }
-                                }, false);
-                            case ("angle"):
-                                return new ComputedVariable(this, variable, partialTicks -> {
-                                    if (radarNumber < radarList.size()) {
-                                        AEntityB_Existing contact = radarList.get(radarNumber);
-                                        return -Math.toDegrees(Math.atan2(-contact.position.y + position.y, Math.hypot(-contact.position.z + position.z, -contact.position.x + position.x))) + orientation.angles.x;
-                                    } else {
-                                        return 0;
-                                    }
-                                }, false);
-                        }
+                        }, false);
                     }
-                    
-                    //Down here means bad variable format.
-                    return new ComputedVariable(false);
-                }else {
-                    return super.createComputedVariable(variable, createDefaultIfNotPresent);
                 }
+                return super.createComputedVariable(variable, createDefaultIfNotPresent);
             }
         }
     }

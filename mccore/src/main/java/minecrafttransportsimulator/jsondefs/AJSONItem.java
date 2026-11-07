@@ -3,6 +3,7 @@ package minecrafttransportsimulator.jsondefs;
 import java.util.List;
 
 import minecrafttransportsimulator.baseclasses.ColorRGB;
+import minecrafttransportsimulator.baseclasses.Point3D;
 import minecrafttransportsimulator.packloading.JSONParser.JSONDescription;
 import minecrafttransportsimulator.packloading.JSONParser.JSONRequired;
 
@@ -52,11 +53,29 @@ public abstract class AJSONItem extends AJSONBase {
         @JSONDescription("An optional oreDict name for this item.  This will make the item be part of the specified oreDict.  Note that you may use custom oreDict names if you want multiple items to be the same ingredient.")
         public String oreDict;
 
-        @JSONDescription("Radius of scan for the radar in degrees. A value of 60 here means a total coverage of 120 degrees.")
+        @JSONDescription("Legacy circular radar cone half-angle in degrees. Used if neither radar angle nor rotation is specified.")
         public double radarWidth;
 
-        @JSONDescription("How far away this radar can detect things, in blocks.")
+        @JSONDescription("How far away this radar can detect vehicles, in blocks. A value of 0 disables the radar.")
         public double radarRange;
+
+        @JSONDescription("Local x, y, z position of the radar antenna relative to this vehicle or part. The radar measures range and traces terrain from this point. If omitted, it uses the entity origin.")
+        public Point3D radarPosition;
+
+        @JSONDescription("Full azimuth width of the radar beam in degrees. A value of 360 covers every bearing.")
+        public Double radarHorizontalAngle;
+
+        @JSONDescription("Full elevation width of the radar beam in degrees, centered on the radar's forward direction. A value of 360 covers every elevation.")
+        public Double radarVerticalAngle;
+
+        @JSONDescription("Radar azimuth rotation in degrees per tick. Zero keeps the beam fixed. Negative values reverse its rotation.")
+        public double radarRotationSpeed;
+
+        @JSONDescription("Radar signal speed in blocks per tick. A return travels twice the distance to the target. Zero makes the return immediate.")
+        public double radarSignalSpeed;
+
+        @JSONDescription("Fraction of remaining detection range lost per solid terrain block crossed by the beam. Zero ignores terrain and one blocks the signal at the first obstacle.")
+        public double radarObstacleAttenuation;
 
         //Moved from multiple locations.
         //Vehicle was deprecated for vehicle type.

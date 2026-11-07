@@ -5,8 +5,6 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -181,16 +179,7 @@ public abstract class AEntityD_Definable<JSONDefinition extends AJSONMultiModelP
      **/
     public AItemPack<? extends AJSONItem> lastOpenedItem;
 
-    //Radar lists.  Only updated once a tick.  Created when first requested via animations.
-    public final List<EntityVehicleF_Physics> aircraftOnRadar = new ArrayList<>();
-    public final List<EntityVehicleF_Physics> groundersOnRadar = new ArrayList<>();
-    private final Comparator<AEntityB_Existing> entityComparator = new Comparator<AEntityB_Existing>() {
-        @Override
-        public int compare(AEntityB_Existing o1, AEntityB_Existing o2) {
-            return position.isFirstCloserThanSecond(o1.position, o2.position) ? -1 : 1;
-        }
-
-    };
+    private Radar radar;
 
     public static final String REPAIRED_NAME = "repaired";
     private static final int DEFAULT_GUI_TEXT_FADE_TICKS = 7;
@@ -416,33 +405,6 @@ public abstract class AEntityD_Definable<JSONDefinition extends AJSONMultiModelP
             }
         }
         playerCraftedItem = false;
-
-        //Only update radar once a second, and only if we requested it via variables.
-        if (definition.general.radarRange > 0 && ticksExisted % 20 == 0) {
-            Collection<EntityVehicleF_Physics> allVehicles = world.getEntitiesOfType(EntityVehicleF_Physics.class);
-            aircraftOnRadar.clear();
-            groundersOnRadar.clear();
-            Point3D searchVector = new Point3D();
-            Point3D LOSVector = new Point3D();
-            for (EntityVehicleF_Physics vehicle : allVehicles) {
-                searchVector.set(0, 0, definition.general.radarRange).rotate(orientation);
-                LOSVector.set(vehicle.position).subtract(position).normalize();
-                double coneAngle = definition.general.radarWidth;
-                double angle = Math.abs(Math.toDegrees(Math.acos(searchVector.normalize().dotProduct(LOSVector, false))));
-                if (!vehicle.outOfHealth && vehicle != this && (angle < coneAngle && vehicle.position.isDistanceToCloserThan(position, definition.general.radarRange))) {
-                    if (vehicle.definition.motorized.isAircraft) {
-                        aircraftOnRadar.add(vehicle);
-                    } else {
-                        groundersOnRadar.add(vehicle);
-                    }
-                    if (!vehicle.radarsTracking.contains(this)) {
-                        vehicle.radarsTracking.add(this);
-                    }
-                }
-            }
-            aircraftOnRadar.sort(entityComparator);
-            groundersOnRadar.sort(entityComparator);
-        }
         world.endProfiling();
     }
 
@@ -452,6 +414,13 @@ public abstract class AEntityD_Definable<JSONDefinition extends AJSONMultiModelP
      * and current values will be set to their current states.
      */
     public void doPostUpdateLogic() {
+        if (definition.general.radarRange > 0 && radar == null) {
+            radar = new Radar(this);
+        }
+        if (radar != null) {
+            radar.update();
+        }
+
         //Update value-based text.  Only do this on clients as servers won't render this text.
         if (world.isClient() && !text.isEmpty()) {
             for (Entry<JSONText, String> textEntry : text.entrySet()) {
@@ -461,6 +430,10 @@ public abstract class AEntityD_Definable<JSONDefinition extends AJSONMultiModelP
                 }
             }
         }
+    }
+
+    public Radar getRadar() {
+        return radar;
     }
 
     /**
@@ -504,9 +477,9 @@ public abstract class AEntityD_Definable<JSONDefinition extends AJSONMultiModelP
     public void remove() {
         if (isValid) {
             super.remove();
-            //Clear radars.
-            aircraftOnRadar.clear();
-            groundersOnRadar.clear();
+            if (radar != null) {
+                radar.clear();
+            }
             
             //Clear rendering assignments.
             if (world.isClient()) {
@@ -1097,7 +1070,38 @@ public abstract class AEntityD_Definable<JSONDefinition extends AJSONMultiModelP
             case ("config_innerwindows"):
                 return new ComputedVariable(this, variable, partialTicks -> ConfigSystem.client.renderingSettings.innerWindows.value ? 1 : 0, false);
             default: {
-                if (variable.startsWith("tick_sin_")) {
+                if (definition.general.radarRange > 0 && variable.equals("radar_rotation")) {
+                    return new ComputedVariable(this, variable, partialTicks -> Radar.rotation(this, partialTicks), true);
+                } else if (definition.general.radarRange > 0 && (variable.startsWith("radar_aircraft_") || variable.startsWith("radar_ground_"))) {
+                    String[] fields = variable.split("_");
+                    if (fields.length != 4 || !fields[2].matches("[0-9]+")) {
+                        return new ComputedVariable(false);
+                    }
+                    final boolean aircraft = fields[1].equals("aircraft");
+                    final int index = ComputedVariable.getVariableNumber(fields[2]);
+                    return new ComputedVariable(this, variable, partialTicks -> {
+                        Radar.Contact contact = radar != null ? radar.getContact(aircraft, index) : null;
+                        if (contact == null) {
+                            return 0;
+                        }
+                        switch (fields[3]) {
+                            case "distance":
+                                return contact.position.distanceTo(position);
+                            case "direction":
+                                return orientation.angles.getClampedYDelta(Math.toDegrees(Math.atan2(contact.position.x - position.x, contact.position.z - position.z)));
+                            case "speed":
+                                return contact.speed;
+                            case "missile":
+                                return contact.isMissile() ? 1 : 0;
+                            case "altitude":
+                                return contact.position.y;
+                            case "angle":
+                                return Math.toDegrees(Math.atan2(contact.position.y - position.y, Math.hypot(contact.position.z - position.z, contact.position.x - position.x))) + orientation.angles.x;
+                            default:
+                                return 0;
+                        }
+                    }, false);
+                } else if (variable.startsWith("tick_sin_")) {
                     final double frequencyMultiplier = Double.parseDouble(variable.substring("tick_sin_".length()));
                     return new ComputedVariable(this, variable, partialTicks -> Math.sin(Math.toRadians((ticksExisted + partialTicks) * frequencyMultiplier)), true);
                 } else if (variable.startsWith("tick_cos_")) {

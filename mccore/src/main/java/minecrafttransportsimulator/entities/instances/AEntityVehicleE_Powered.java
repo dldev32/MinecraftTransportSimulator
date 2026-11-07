@@ -1,6 +1,7 @@
 package minecrafttransportsimulator.entities.instances;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
 
@@ -69,7 +70,7 @@ public abstract class AEntityVehicleE_Powered extends AEntityVehicleD_Moving {
     //Engines.
     public final List<PartEngine> engines = new ArrayList<>();
 
-    //Map containing incoming missiles and radar info, sorted by distance.
+    //Incoming missiles and sources tracking this vehicle.
     public final List<EntityBullet> missilesIncoming = new ArrayList<>();
     public final List<AEntityD_Definable<?>> radarsTracking = new ArrayList<>();
     public final List<PartGun> gunsLockedOn = new ArrayList<>();
@@ -196,11 +197,7 @@ public abstract class AEntityVehicleE_Powered extends AEntityVehicleD_Moving {
         }
 
         //Update missile list to sort by distance.
-        missilesIncoming.sort((missle1, missile2) -> missle1.targetDistance < missile2.targetDistance ? -1 : 1);
-
-        //Check to make sure we are still being tracked.
-        radarsTracking.removeIf(tracker -> !tracker.isValid || (!tracker.aircraftOnRadar.contains(this) && !tracker.groundersOnRadar.contains(this)));
-        gunsLockedOn.removeIf(gun -> !gun.isValid || gun.engineTarget == null || gun.engineTarget.vehicleOn != this);
+        missilesIncoming.sort(Comparator.comparingDouble(missile -> missile.targetDistance));
 
         //If we are supposed to de-spawn, do so.
         if (outOfHealth && ConfigSystem.settings.general.vehicleDeathDespawnTime.value > 0) {
