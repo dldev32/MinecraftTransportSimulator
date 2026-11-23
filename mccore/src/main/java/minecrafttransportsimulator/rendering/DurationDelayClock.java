@@ -28,6 +28,7 @@ public class DurationDelayClock {
     public final double animationAxisMagnitude;
     public final Point3D animationAxisNormalized;
     public final boolean isUseful;
+    public double appliedRotation = Double.NaN;
     private Long timeCommandedForwards = 0L;
     private Long timeCommandedReverse = 0L;
 

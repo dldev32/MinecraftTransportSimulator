@@ -1,7 +1,10 @@
 package minecrafttransportsimulator.baseclasses;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
+import java.util.function.Predicate;
 
 import minecrafttransportsimulator.entities.components.AEntityD_Definable;
 import minecrafttransportsimulator.jsondefs.JSONAnimationDefinition;
@@ -41,6 +44,8 @@ public class AnimationSwitchbox {
     private final RotationMatrix helperRotationMatrix = new RotationMatrix();
     private final TransformationMatrix helperOffsetOperationMatrix = new TransformationMatrix();
     private boolean invalidApplyAfterReported;
+    private boolean resolvingApplyAfter;
+    private AnimationSwitchbox appliedAfter;
     private boolean inhibitAnimations;
     private boolean switchboxEnabled;
     private long lastTickRun;
@@ -64,13 +69,18 @@ public class AnimationSwitchbox {
             lastTickRun = entity.ticksExisted;
             lastPartialTickRun = partialTicks;
 
+            appliedAfter = null;
             if (applyAfter != null) {
                 AnimationSwitchbox switchbox = entity.animatedObjectSwitchboxes.get(applyAfter);
                 if (switchbox == null) {
                     String reason = entity.animatedObjectDefinitions.containsKey(applyAfter) ? "Referenced animated object has no animations to apply after." : "Referenced animated object was not found in rendering.animatedObjects.";
                     notifyInvalidApplyAfter(reason);
                     resetTransforms();
-                } else if (switchbox.runSwitchbox(partialTicks, forceSameTick)) {
+                } else if (switchbox == this || switchbox.resolvingApplyAfter) {
+                    notifyInvalidApplyAfter("Referenced animated object creates an applyAfter cycle.");
+                    resetTransforms();
+                } else if (runReferencedSwitchbox(switchbox, partialTicks, forceSameTick)) {
+                    appliedAfter = switchbox;
                     translation.set(switchbox.translation);
                     rotation.set(switchbox.rotation);
                     scale.set(switchbox.scale);
@@ -94,6 +104,7 @@ public class AnimationSwitchbox {
                         break;
                     }
                     case ROTATION: {
+                        clock.appliedRotation = Double.NaN;
                         if (!inhibitAnimations) {
                             runRotation(clock, partialTicks);
                         }
@@ -159,6 +170,7 @@ public class AnimationSwitchbox {
     public void runRotation(DurationDelayClock clock, float partialTicks) {
         //Found rotation.  Get angles that needs to be applied.
         double variableValue = getAnimatedVariableValue(clock, clock.animationAxisMagnitude, partialTicks);
+        clock.appliedRotation = variableValue;
         if (variableValue != 0) {
             helperRotationMatrix.setToAxisAngle(clock.animationAxisNormalized, variableValue);
 
@@ -217,6 +229,54 @@ public class AnimationSwitchbox {
             scale.multiply(helperScalingVector);
         } else {
             netMatrix.applyScaling(helperScalingVector);
+        }
+    }
+
+    /**
+     * Appends the rotations inherited by the last evaluation that pass the filter.
+     * Returns whether an inherited rotation was excluded.
+     */
+    public boolean appendInheritedRotation(RotationMatrix target, Predicate<ComputedVariable> includeRotation) {
+        return appliedAfter != null && appliedAfter.appendAppliedRotation(target, includeRotation, new HashSet<>());
+    }
+
+    public boolean usesVariablesFrom(AEntityD_Definable<?> variableOwner) {
+        Set<AnimationSwitchbox> visited = new HashSet<>();
+        AnimationSwitchbox switchbox = this;
+        while (switchbox != null && visited.add(switchbox)) {
+            for (DurationDelayClock clock : switchbox.clocks) {
+                if (switchbox.entity.getOrCreateVariable(clock.animation.variable).entity == variableOwner) {
+                    return true;
+                }
+            }
+            switchbox = switchbox.applyAfter != null ? switchbox.entity.animatedObjectSwitchboxes.get(switchbox.applyAfter) : null;
+        }
+        return false;
+    }
+
+    private boolean appendAppliedRotation(RotationMatrix target, Predicate<ComputedVariable> includeRotation, Set<AnimationSwitchbox> visited) {
+        if (!switchboxEnabled || !visited.add(this)) {
+            return false;
+        }
+        boolean excludedRotation = appliedAfter != null && appliedAfter.appendAppliedRotation(target, includeRotation, visited);
+        for (DurationDelayClock clock : clocks) {
+            if (!Double.isNaN(clock.appliedRotation)) {
+                if (!includeRotation.test(entity.getOrCreateVariable(clock.animation.variable))) {
+                    excludedRotation = true;
+                } else if (clock.appliedRotation != 0) {
+                    target.multiply(helperRotationMatrix.setToAxisAngle(clock.animationAxisNormalized, clock.appliedRotation));
+                }
+            }
+        }
+        return excludedRotation;
+    }
+
+    private boolean runReferencedSwitchbox(AnimationSwitchbox switchbox, float partialTicks, boolean forceSameTick) {
+        resolvingApplyAfter = true;
+        try {
+            return switchbox.runSwitchbox(partialTicks, forceSameTick);
+        } finally {
+            resolvingApplyAfter = false;
         }
     }
 

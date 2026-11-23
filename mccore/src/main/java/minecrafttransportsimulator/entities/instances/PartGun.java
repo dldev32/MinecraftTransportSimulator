@@ -152,6 +152,9 @@ public class PartGun extends APart {
     private final Point3D targetVector = new Point3D();
     private final Point3D targetAngles = new Point3D();
     private final Point3D controllerAngles = new Point3D();
+    private final Point3D firingPosition = new Point3D();
+    private final RotationMatrix firingPlacementRotation = new RotationMatrix();
+    private final RotationMatrix muzzleReferenceOrientation = new RotationMatrix();
     private final RotationMatrix firingSpreadRotation = new RotationMatrix();
     private final RotationMatrix pitchMuzzleRotation = new RotationMatrix();
     private final RotationMatrix yawMuzzleRotation = new RotationMatrix();
@@ -230,6 +233,7 @@ public class PartGun extends APart {
         this.resetPosition = definition.gun.resetPosition || placementDefinition.resetPosition;
         this.isHandHeld = entityOn instanceof EntityPlayerGun;
         this.holdingPlayer = isHandHeld ? ((EntityPlayerGun) entityOn).player : null;
+        this.muzzleReferenceOrientation.multiply(orientation);
 
         //Load saved data.
         if (data != null) {
@@ -327,10 +331,8 @@ public class PartGun extends APart {
         firedThisTick = false;
         isRunningInCoaxialMode = false;
         prevInternalOrientation.set(internalOrientation);
-        updateCoaxialReferenceOrientation();
-        if (placementDefinition.isCoAxial && partOn instanceof PartGun) {
-            synchronizeCoaxialOrientation((PartGun) partOn);
-        }
+        updateIndependentPlacementAnimation();
+        updateMuzzleReferenceOrientation();
         if (currentBullet != null && !currentBullet.isValid) {
             currentBullet = null;
         }
@@ -481,6 +483,8 @@ public class PartGun extends APart {
 
                         //If we are in our cam, fire the bullets.
                         if (camOffset == 0) {
+                            getCurrentMountedPosition(firingPosition, firingPlacementRotation);
+                            updateMuzzleReferenceOrientation();
                             JSONCameraShake cameraShakeParams = definition.gun.cameraShakeParams;
                             double cameraShakeStrength = 0;
                             for (JSONMuzzle muzzle : definition.gun.muzzleGroups.get(currentMuzzleGroupIndex).muzzles) {
@@ -491,7 +495,7 @@ public class PartGun extends APart {
                                     ++bulletsFired;
                                     if (!lastLoadedBullet.definition.bullet.isBlank && (world.isClient() || serverIsPrimaryController)) {
                                         //Get the bullet's state.
-                                        setBulletSpawn(bulletPosition, bulletVelocity, bulletOrientation, muzzle, true);
+                                        setBulletSpawn(bulletPosition, bulletVelocity, bulletOrientation, muzzle, true, firingPosition, entityOn.motion);
 
                                         //Add the bullet to the world.
                                         //If the bullet is a missile, give it a target.
@@ -552,7 +556,7 @@ public class PartGun extends APart {
                             }
 
                             if (!world.isClient()) {
-                                CameraSystem.sendGunshotCameraShake(world, position, cameraShakeStrength, cameraShakeParams != null ? cameraShakeParams.radius : 0, cameraShakeParams != null ? cameraShakeParams.duration : 0, cameraShakeParams != null ? cameraShakeParams.intensity : 1);
+                                CameraSystem.sendGunshotCameraShake(world, firingPosition, cameraShakeStrength, cameraShakeParams != null ? cameraShakeParams.radius : 0, cameraShakeParams != null ? cameraShakeParams.duration : 0, cameraShakeParams != null ? cameraShakeParams.intensity : 1);
                             }
 
                             //Update states.
@@ -692,7 +696,8 @@ public class PartGun extends APart {
 
         //Now run super.  This needed to wait for the gun states to ensure proper states.
         super.update();
-        updateCoaxialReferenceOrientation();
+        updateMuzzleReferenceOrientation();
+        zeroReferenceOrientation.set(muzzleReferenceOrientation);
 
         //If we have a controller seat on us, adjust the player's facing to account for our movement.
         //If we don't, we'll just rotate forever.
@@ -795,24 +800,64 @@ public class PartGun extends APart {
         }
     }
 
-    /**
-     * Guns on a non-gun coaxial mount inherit its animated orientation for aiming and firing.
-     * A gun that drives the mount keeps its unanimated reference to avoid rotation feedback.
-     */
-    private void updateCoaxialReferenceOrientation() {
-        if (placementDefinition.isCoAxial && partOn != null && !(partOn instanceof PartGun)) {
-            if (partOn.definition.generic.movementAnimations != null) {
-                for (JSONAnimationDefinition animation : partOn.definition.generic.movementAnimations) {
-                    if (animation.animationType == AnimationComponentType.ROTATION && partOn.getOrCreateVariable(animation.variable).entity == this) {
-                        return;
-                    }
-                }
-            }
-            zeroReferenceOrientation.set(partOn.orientation);
-            if (placementDefinition.rot != null) {
-                zeroReferenceOrientation.multiply(placementDefinition.rot);
+    private void updateMuzzleReferenceOrientation() {
+        if (partOn == null) {
+            muzzleReferenceOrientation.setToZero().multiply(entityOn.orientation);
+        } else {
+            boolean drivesParentPlacement = appendParentReference(partOn);
+            if (placementDefinition.isCoAxial && !(partOn instanceof PartGun) && !drivesParentPlacement && !drivesCoaxialMount()) {
+                muzzleReferenceOrientation.setToZero().multiply(partOn.orientation);
             }
         }
+        appendSlotReference(this);
+        if (placementDefinition.isCoAxial && partOn instanceof PartGun) {
+            synchronizeCoaxialOrientation((PartGun) partOn);
+        }
+    }
+
+    private boolean appendParentReference(APart part) {
+        if (part instanceof PartGun) {
+            muzzleReferenceOrientation.set(((PartGun) part).muzzleReferenceOrientation);
+            return false;
+        }
+        boolean drivesParentPlacement = false;
+        if (part.partOn == null) {
+            muzzleReferenceOrientation.setToZero().multiply(part.entityOn.orientation);
+        } else {
+            drivesParentPlacement = appendParentReference(part.partOn);
+        }
+        return appendSlotReference(part) || drivesParentPlacement;
+    }
+
+    private boolean appendSlotReference(APart part) {
+        boolean drivesPlacement = part.appendInheritedPlacementRotation(muzzleReferenceOrientation, this::isIndependentMountRotation);
+        if (part.placementDefinition.rot != null) {
+            muzzleReferenceOrientation.multiply(part.placementDefinition.rot);
+        }
+        return drivesPlacement;
+    }
+
+    private boolean isIndependentMountRotation(ComputedVariable variable) {
+        if (variable.entity != this) {
+            return true;
+        }
+        //Muzzle transforms already apply the gun's own aiming angles.
+        String name = variable.variableKey;
+        if (name.startsWith(ComputedVariable.INVERTED_PREFIX)) {
+            name = name.substring(1);
+        }
+        return !name.equals("gun_yaw") && !name.equals("gun_pitch");
+    }
+
+    private boolean drivesCoaxialMount() {
+        if (partOn.definition.generic.movementAnimations != null) {
+            for (JSONAnimationDefinition animation : partOn.definition.generic.movementAnimations) {
+                if (animation.animationType == AnimationComponentType.ROTATION && partOn.getOrCreateVariable(animation.variable).entity == this) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     /**
@@ -820,13 +865,9 @@ public class PartGun extends APart {
      * Applying a second slew rate would let a moving turret leave its coaxial guns behind.
      */
     private void synchronizeCoaxialOrientation(PartGun parentGun) {
-        zeroReferenceOrientation.set(parentGun.zeroReferenceOrientation);
-        if (placementDefinition.rot != null) {
-            zeroReferenceOrientation.multiply(placementDefinition.rot);
-        }
         controllerCameraGunOrientation.setToAngles(parentGun.internalOrientation.angles);
-        controllerCameraOrientation.set(parentGun.zeroReferenceOrientation).multiply(controllerCameraGunOrientation);
-        controllerRelativeLookVector.computeVectorAngles(controllerCameraOrientation, zeroReferenceOrientation);
+        controllerCameraOrientation.set(parentGun.muzzleReferenceOrientation).multiply(controllerCameraGunOrientation);
+        controllerRelativeLookVector.computeVectorAngles(controllerCameraOrientation, muzzleReferenceOrientation);
         internalOrientation.angles.x = Math.max(minPitch, Math.min(maxPitch, controllerRelativeLookVector.x));
         internalOrientation.angles.y = Math.max(minYaw, Math.min(maxYaw, controllerRelativeLookVector.y));
         if (internalOrientation.angles.y - prevInternalOrientation.angles.y > 180) {
@@ -1046,14 +1087,14 @@ public class PartGun extends APart {
                         yawDelta += 360;
                     }
                     controllerCameraGunOrientation.setToAngles(internalOrientation.angles);
-                    controllerCameraOrientation.set(zeroReferenceOrientation).multiply(controllerCameraGunOrientation).convertToAngles();
+                    controllerCameraOrientation.set(muzzleReferenceOrientation).multiply(controllerCameraGunOrientation).convertToAngles();
                     controllerCameraOrientation.angles.y += yawDelta;
                     controllerCameraOrientation.angles.x += controller.getPitch() - lastControllerSeat.riderCameraLastAngles.x;
                     controllerCameraOrientation.updateToAngles();
                 }
-                controllerRelativeLookVector.computeVectorAngles(controllerCameraOrientation, zeroReferenceOrientation);
+                controllerRelativeLookVector.computeVectorAngles(controllerCameraOrientation, muzzleReferenceOrientation);
             } else {
-                controllerRelativeLookVector.computeVectorAngles(controller.getOrientation(), zeroReferenceOrientation);
+                controllerRelativeLookVector.computeVectorAngles(controller.getOrientation(), muzzleReferenceOrientation);
             }
             handleMovement(controllerRelativeLookVector.y - internalOrientation.angles.y, controllerRelativeLookVector.x - internalOrientation.angles.x);
             if (localCameraControl) {
@@ -1152,7 +1193,7 @@ public class PartGun extends APart {
 
     private void lockControllerToActiveCamera(IWrapperEntity controller) {
         controllerCameraGunOrientation.setToAngles(internalOrientation.angles);
-        controllerCameraOrientation.set(zeroReferenceOrientation).multiply(controllerCameraGunOrientation).convertToAngles();
+        controllerCameraOrientation.set(muzzleReferenceOrientation).multiply(controllerCameraGunOrientation).convertToAngles();
         controllerCameraRelativeAngles.computeVectorAngles(controllerCameraOrientation, lastControllerSeat.orientation);
         lastControllerSeat.riderRelativeOrientation.angles.set(controllerCameraRelativeAngles);
         lastControllerSeat.riderRelativeOrientation.updateToAngles();
@@ -1188,7 +1229,7 @@ public class PartGun extends APart {
             //Transform vector to gun's coordinate system.
             //Get the angles the gun has to rotate to match the target.
             //If the are outside the gun's clamps, this isn't a valid target.
-            targetAngles.set(targetVector).reOrigin(zeroReferenceOrientation).getAngles(true);
+            targetAngles.set(targetVector).reOrigin(muzzleReferenceOrientation).getAngles(true);
 
             //Check yaw, if we need to.
             if (minYaw != -180 || maxYaw != 180) {
@@ -1434,6 +1475,10 @@ public class PartGun extends APart {
      * Used in both spawning the bullet, and in rendering where the muzzle position is.
      */
     public void setBulletSpawn(Point3D bulletPosition, Point3D bulletVelocity, RotationMatrix bulletOrientation, JSONMuzzle muzzle, boolean addSpread) {
+        setBulletSpawn(bulletPosition, bulletVelocity, bulletOrientation, muzzle, addSpread, position, motion);
+    }
+
+    private void setBulletSpawn(Point3D bulletPosition, Point3D bulletVelocity, RotationMatrix bulletOrientation, JSONMuzzle muzzle, boolean addSpread, Point3D gunPosition, Point3D gunMotion) {
         //Set velocity.
         if (muzzleVelocityVar.currentValue != 0) {
             bulletVelocity.set(0, 0, muzzleVelocityVar.currentValue / 20D);
@@ -1457,17 +1502,18 @@ public class PartGun extends APart {
             if (muzzle.rot != null) {
                 bulletVelocity.rotate(muzzle.rot);
             }
-            bulletVelocity.rotate(internalOrientation).rotate(zeroReferenceOrientation);
+            bulletVelocity.rotate(internalOrientation).rotate(muzzleReferenceOrientation);
         } else {
             bulletVelocity.set(0, 0, 0);
+            internalOrientation.updateToAngles();
         }
 
         //Add gun velocity to bullet to ensure we spawn with the offset.
         if (!definition.gun.disableInheritedMotion) {
             if (vehicleOn != null) {
-                bulletVelocity.addScaled(motion, vehicleOn.speedFactor);
+                bulletVelocity.addScaled(gunMotion, vehicleOn.speedFactor);
             } else {
-                bulletVelocity.add(motion);
+                bulletVelocity.add(gunMotion);
             }
         }
 
@@ -1480,10 +1526,10 @@ public class PartGun extends APart {
         } else {
             bulletPosition.rotate(internalOrientation);
         }
-        bulletPosition.rotate(zeroReferenceOrientation).add(position);
+        bulletPosition.rotate(muzzleReferenceOrientation).add(gunPosition);
 
         //Set orientation.
-        bulletOrientation.set(zeroReferenceOrientation).multiply(internalOrientation);
+        bulletOrientation.set(muzzleReferenceOrientation).multiply(internalOrientation);
         if (muzzle.rot != null && !definition.gun.disableMuzzleOrientation) {
             bulletOrientation.multiply(muzzle.rot);
         }

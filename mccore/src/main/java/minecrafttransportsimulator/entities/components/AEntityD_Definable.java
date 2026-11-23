@@ -6,6 +6,7 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -348,8 +349,9 @@ public abstract class AEntityD_Definable<JSONDefinition extends AJSONMultiModelP
             if (definition.rendering.animatedObjects != null) {
                 for (JSONAnimatedObject animatedDef : definition.rendering.animatedObjects) {
                     animatedObjectDefinitions.put(animatedDef.objectName, animatedDef);
-                    if (animatedDef.animations != null) {
-                        animatedObjectSwitchboxes.put(animatedDef.objectName, new AnimationSwitchbox(this, animatedDef.animations, animatedDef.applyAfter, "rendering animated object '" + animatedDef.objectName + "'"));
+                    if (animatedDef.animations != null || animatedDef.applyAfter != null) {
+                        List<JSONAnimationDefinition> animations = animatedDef.animations != null ? animatedDef.animations : Collections.emptyList();
+                        animatedObjectSwitchboxes.put(animatedDef.objectName, new AnimationSwitchbox(this, animations, animatedDef.applyAfter, "rendering animated object '" + animatedDef.objectName + "'"));
                     }
                 }
             }

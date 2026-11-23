@@ -2,6 +2,7 @@ package minecrafttransportsimulator.entities.instances;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Predicate;
 
 import minecrafttransportsimulator.baseclasses.AnimationSwitchbox;
 import minecrafttransportsimulator.baseclasses.BoundingBox;
@@ -90,6 +91,7 @@ public abstract class APart extends AEntityF_Multipart<JSONPart> {
     public final RotationMatrix prevZeroReferenceOrientation;
     public final Point3D externalAnglesRotated = new Point3D();
     private final Point3D scaledHitboxOffset = new Point3D();
+    private final Point3D scaledMovementOffset = new Point3D();
     private final AnimationSwitchbox placementActiveSwitchbox;
     private final AnimationSwitchbox internalActiveSwitchbox;
     private final AnimationSwitchbox placementMovementSwitchbox;
@@ -213,10 +215,7 @@ public abstract class APart extends AEntityF_Multipart<JSONPart> {
         motion.set(entityOn.motion);
         position.set(entityOn.position);
         orientation.set(entityOn.orientation);
-        localOffset.set(placementDefinition.pos);
-        if (definition.generic.slotOffset != null) {
-            localOffset.add(definition.generic.slotOffset);
-        }
+        setPlacementOffset(localOffset);
         
         //Update permanent-ness
         isPermanent = placementDefinition.lockingVariables != null ? !isVariableListTrue(placementDefinition.lockingVariables) : placementDefinition.isPermanent;
@@ -232,33 +231,16 @@ public abstract class APart extends AEntityF_Multipart<JSONPart> {
             zeroReferenceOrientation.multiply(placementDefinition.rot);
         }
 
-        //Init orientation.
-        localOrientation.setToZero();
-
-        //First apply part slot animation translation and rotation.
-        //This will rotate us to our proper slot position.
         world.beginProfiling("SwitchboxCheck", false);
-        if (!isInvisible && placementMovementSwitchbox != null) {
-            isInvisible = !placementMovementSwitchbox.runSwitchbox(0, false);
-            //Offset needs to move according to full transform.
-            //This is because these coords are from what we are on.
-            //Orientation just needs to update according to new rotation.
-            localOffset.transform(placementMovementSwitchbox.netMatrix);
-            localOrientation.multiply(placementMovementSwitchbox.rotation);
+        isInvisible = !applyPlacementTransform(localOffset, localOrientation);
+        if (canApplyPlacementMovement()) {
             externalAnglesRotated.set(placementMovementSwitchbox.rotation.convertToAngles());
         } else {
             externalAnglesRotated.set(0, 0, 0);
         }
 
-        //Now rotate us to face the slot's requested orientation.
         world.beginProfiling("SwitchboxApply", false);
-        if (placementDefinition.rot != null) {
-            localOrientation.multiply(placementDefinition.rot);
-        }
-
-        //Now scale.  Needs to happen after placement operations to scale their transforms properly.
         scale.set(entityOn.scale);
-        localOffset.multiply(scale);
         if (placementDefinition.partScale != null) {
             scale.multiply(placementDefinition.partScale);
         }
@@ -268,7 +250,7 @@ public abstract class APart extends AEntityF_Multipart<JSONPart> {
             isInvisible = !internalMovementSwitchbox.runSwitchbox(0, false) || isInvisible;
             //Offset here, to apply to locals, needs to be multiplied by scale and local orientation.
             //If we don't do this, then we won't calculate the locals right.
-            localOffset.add(internalMovementSwitchbox.translation.multiply(scale).rotate(localOrientation));
+            addInternalMovementOffset(localOffset, localOrientation);
             localOrientation.multiply(internalMovementSwitchbox.rotation);
         }
 
@@ -287,6 +269,64 @@ public abstract class APart extends AEntityF_Multipart<JSONPart> {
         updatePartBoundingBox();
         world.endProfiling();
         world.endProfiling();
+    }
+
+    private void setPlacementOffset(Point3D offset) {
+        offset.set(placementDefinition.pos);
+        if (definition.generic.slotOffset != null) {
+            offset.add(definition.generic.slotOffset);
+        }
+    }
+
+    private boolean canApplyPlacementMovement() {
+        return placementMovementSwitchbox != null && (partOn == null || !partOn.isInvisible);
+    }
+
+    private boolean applyPlacementTransform(Point3D offset, RotationMatrix rotation) {
+        rotation.setToZero();
+        boolean visible = partOn == null || !partOn.isInvisible;
+        if (canApplyPlacementMovement()) {
+            visible = placementMovementSwitchbox.runSwitchbox(0, false);
+            offset.transform(placementMovementSwitchbox.netMatrix);
+            rotation.multiply(placementMovementSwitchbox.rotation);
+        }
+        if (placementDefinition.rot != null) {
+            rotation.multiply(placementDefinition.rot);
+        }
+        offset.multiply(entityOn.scale);
+        return visible;
+    }
+
+    private void addInternalMovementOffset(Point3D offset, RotationMatrix rotation) {
+        scaledMovementOffset.set(internalMovementSwitchbox.translation).multiply(entityOn.scale);
+        if (placementDefinition.partScale != null) {
+            scaledMovementOffset.multiply(placementDefinition.partScale);
+        }
+        offset.add(scaledMovementOffset.rotate(rotation));
+    }
+
+    /**
+     * Computes the origin from the current parent and slot pose before the part updates.
+     * The part's own movement offset is from its last update.
+     */
+    protected final void getCurrentMountedPosition(Point3D mountedPosition, RotationMatrix placementRotation) {
+        setPlacementOffset(mountedPosition);
+        applyPlacementTransform(mountedPosition, placementRotation);
+        if (internalMovementSwitchbox != null) {
+            addInternalMovementOffset(mountedPosition, placementRotation);
+        }
+        mountedPosition.rotate(entityOn.orientation).add(entityOn.position);
+    }
+
+    protected final void updateIndependentPlacementAnimation() {
+        //Leave animations that use the part's state to its normal update.
+        if (placementDefinition.applyAfter != null && canApplyPlacementMovement() && !placementMovementSwitchbox.usesVariablesFrom(this)) {
+            placementMovementSwitchbox.runSwitchbox(0, false);
+        }
+    }
+
+    protected final boolean appendInheritedPlacementRotation(RotationMatrix target, Predicate<ComputedVariable> includeRotation) {
+        return canApplyPlacementMovement() && placementMovementSwitchbox.appendInheritedRotation(target, includeRotation);
     }
 
     @Override
