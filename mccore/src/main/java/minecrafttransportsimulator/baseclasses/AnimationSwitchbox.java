@@ -48,6 +48,7 @@ public class AnimationSwitchbox {
     private AnimationSwitchbox appliedAfter;
     private boolean inhibitAnimations;
     private boolean switchboxEnabled;
+    private int evaluatedClockCount;
     private long lastTickRun;
     private float lastPartialTickRun;
 
@@ -70,6 +71,7 @@ public class AnimationSwitchbox {
             lastPartialTickRun = partialTicks;
 
             appliedAfter = null;
+            evaluatedClockCount = 0;
             if (applyAfter != null) {
                 AnimationSwitchbox switchbox = entity.animatedObjectSwitchboxes.get(applyAfter);
                 if (switchbox == null) {
@@ -96,6 +98,7 @@ public class AnimationSwitchbox {
             inhibitAnimations = false;
             switchboxEnabled = true;
             for (DurationDelayClock clock : clocks) {
+                ++evaluatedClockCount;
                 switch (clock.animation.animationType) {
                     case TRANSLATION: {
                         if (!inhibitAnimations) {
@@ -258,8 +261,18 @@ public class AnimationSwitchbox {
         if (!switchboxEnabled || !visited.add(this)) {
             return false;
         }
-        boolean excludedRotation = appliedAfter != null && appliedAfter.appendAppliedRotation(target, includeRotation, visited);
-        for (DurationDelayClock clock : clocks) {
+        boolean excludedInheritedRotation = appliedAfter != null && appliedAfter.appendAppliedRotation(target, includeRotation, visited);
+        return appendLocalRotation(target, includeRotation) || excludedInheritedRotation;
+    }
+
+    /**
+     * Appends the local rotations that ran during the last evaluation and pass the filter.
+     * Returns whether a local rotation was excluded.
+     */
+    public boolean appendLocalRotation(RotationMatrix target, Predicate<ComputedVariable> includeRotation) {
+        boolean excludedRotation = false;
+        for (int i = 0; i < evaluatedClockCount; ++i) {
+            DurationDelayClock clock = clocks.get(i);
             if (!Double.isNaN(clock.appliedRotation)) {
                 if (!includeRotation.test(entity.getOrCreateVariable(clock.animation.variable))) {
                     excludedRotation = true;

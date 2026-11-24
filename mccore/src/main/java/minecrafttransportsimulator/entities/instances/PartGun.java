@@ -804,12 +804,12 @@ public class PartGun extends APart {
         if (partOn == null) {
             muzzleReferenceOrientation.setToZero().multiply(entityOn.orientation);
         } else {
-            boolean drivesParentPlacement = appendParentReference(partOn);
-            if (placementDefinition.isCoAxial && !(partOn instanceof PartGun) && !drivesParentPlacement && !drivesCoaxialMount()) {
+            boolean drivesParentRotation = appendParentReference(partOn);
+            if (placementDefinition.isCoAxial && !(partOn instanceof PartGun) && !drivesParentRotation && !drivesCoaxialMount()) {
                 muzzleReferenceOrientation.setToZero().multiply(partOn.orientation);
             }
         }
-        appendSlotReference(this);
+        appendPartReference(this);
         if (placementDefinition.isCoAxial && partOn instanceof PartGun) {
             synchronizeCoaxialOrientation((PartGun) partOn);
         }
@@ -820,21 +820,21 @@ public class PartGun extends APart {
             muzzleReferenceOrientation.set(((PartGun) part).muzzleReferenceOrientation);
             return false;
         }
-        boolean drivesParentPlacement = false;
+        boolean drivesParentRotation = false;
         if (part.partOn == null) {
             muzzleReferenceOrientation.setToZero().multiply(part.entityOn.orientation);
         } else {
-            drivesParentPlacement = appendParentReference(part.partOn);
+            drivesParentRotation = appendParentReference(part.partOn);
         }
-        return appendSlotReference(part) || drivesParentPlacement;
+        return appendPartReference(part) || drivesParentRotation;
     }
 
-    private boolean appendSlotReference(APart part) {
+    private boolean appendPartReference(APart part) {
         boolean drivesPlacement = part.appendInheritedPlacementRotation(muzzleReferenceOrientation, this::isIndependentMountRotation);
         if (part.placementDefinition.rot != null) {
             muzzleReferenceOrientation.multiply(part.placementDefinition.rot);
         }
-        return drivesPlacement;
+        return part.appendInternalMovementRotation(muzzleReferenceOrientation, this::isIndependentMountRotation) || drivesPlacement;
     }
 
     private boolean isIndependentMountRotation(ComputedVariable variable) {

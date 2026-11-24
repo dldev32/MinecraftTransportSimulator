@@ -329,6 +329,10 @@ public abstract class APart extends AEntityF_Multipart<JSONPart> {
         return canApplyPlacementMovement() && placementMovementSwitchbox.appendInheritedRotation(target, includeRotation);
     }
 
+    protected final boolean appendInternalMovementRotation(RotationMatrix target, Predicate<ComputedVariable> includeRotation) {
+        return internalMovementSwitchbox != null && internalMovementSwitchbox.appendLocalRotation(target, includeRotation);
+    }
+
     @Override
     public EntityAutoUpdateTime getUpdateTime() {
         //Sync with what were are on.
